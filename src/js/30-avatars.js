@@ -1,5 +1,4 @@
-/* ---------- avatars: seeded chibi characters (same system as the cafe, chars/chibi.glb) ---------- */
-// Seeded look: same seed → same character on every viewer's screen
+/* ---------- avatars: seeded chibi characters with outfits (same system as the cafe, chars/*.glb) ---------- */
 function rng(seed){ let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const LOOK = {
   skin: ['#f8dfca', '#f2d0b4', '#e9bd96', '#d6a37a', '#b07c55', '#85593b'],
@@ -17,15 +16,29 @@ function lookFrom(seed){
   L.shorts = !L.skirt && r() < .22;
   if (L.style === 5 && L.hat < 0) L.hat = 0;
   // chibi: hairstyle and hair colour come from the seed (random with 다른 모습 뽑기)
-  L.style = seed & 7; L.hairIdx = ((seed >>> 3) & 15) % HAIR_COLORS.length; L.hair = HAIR_COLORS[L.hairIdx][1]; L.size = .96 + r() * .08;
+  // girls (8 hairstyles): dress, or a top with a skirt or shorts; boys (2 hairstyles): a top with long pants or shorts
+  L.male = r() < .35; L.style = L.male ? 8 + ((seed >>> 1) & 1) : (seed >>> 1) & 7;
+  L.dress = !L.male && r() < .4; L.outfitC = (r() * DRESS_COLORS.length) | 0;
+  L.top = r() < .55 ? 'tshirt' : 'tank'; L.bottom = L.male ? (r() < .55 ? 'pants' : 'short') : (r() < .55 ? 'skirt' : 'short');
+  L.topC = (r() * TOP_COLORS.length) | 0; L.botC = (r() * BOTTOM_COLORS.length) | 0; L.shoeC = (r() * SHOE_COLORS.length) | 0;
+  L.outfit = L.dress ? 0 : OUTFIT_KEY[L.top]; L.hairIdx = ((seed >>> 3) & 15) % HAIR_COLORS.length; L.hair = HAIR_COLORS[L.hairIdx][1]; L.size = .96 + r() * .08;
   return L;
 }
 const HIP = .44;
 /* ---------- chibi avatars: one body rigged in the page, 8 hairstyles, face decal (chars/chibi.glb) ---------- */
-const HAIR_KEYS = ['twin', 'bob', 'fluffy', 'sidetail', 'wavy', 'braid', 'bunears', 'x7'];
-const HAIR_NAMES = ['트윈테일', '긴 생머리', '레이어드 컷', '웨이브 양갈래', '긴 웨이브', '옆 땋은 머리', '단발', '낮은 양묶음'];
+const HAIR_KEYS = ['twin', 'bob', 'fluffy', 'sidetail', 'wavy', 'braid', 'bunears', 'x7', 'm1', 'm2'];
+const MALE_HAIRS = ['m1', 'm2'];   // separate files chars/hair_<key>.glb, no hair-coloured scalp
+const HAIR_NAMES = ['트윈테일', '긴 생머리', '레이어드 컷', '웨이브 양갈래', '긴 웨이브', '옆 땋은 머리', '단발', '낮은 양묶음', '짧은 웨이브', '넘긴 머리'];
 const HAIR_COLORS = [['흑갈색', '#2b2220'], ['다크 브라운', '#4a2e22'], ['초코', '#5e3a29'], ['밤색', '#7a4b32'], ['캐러멜', '#a8714a'], ['금발', '#d9b77a'],
   ['애쉬 그레이', '#a9a4a2'], ['와인', '#8a3b45'], ['핑크', '#e7a0b5'], ['하늘', '#9ab6e2'], ['라벤더', '#b49ad8'], ['민트', '#9cc9b7']];
+// outfits (more to come): each is a mesh already fitted to the chibi body in chars/outfits/<key>.glb
+const OUTFITS = [{ key: 'dress', name: '드레스' }, { key: 'tshirt', name: '티셔츠' }, { key: 'tank', name: '나시' }, { key: 'short', name: '반바지' }, { key: 'skirt', name: '플리츠 치마' }];
+const OUTFIT_KEY = Object.fromEntries(OUTFITS.map((o, i) => [o.key, i]));
+const TOP_COLORS = [['화이트', '#f4efe6'], ['하늘', '#a9c6ee'], ['네이비', '#3f5570'], ['민트', '#a7d6c3'], ['레몬', '#f2dc8e'], ['핑크', '#e7a0b5'], ['세이지', '#8fb08a'], ['라벤더', '#b3a2db'], ['코랄', '#f2b8a0'], ['차콜', '#4a4a50']];
+const BOTTOM_COLORS = [['데님', '#3f5570'], ['연청', '#7f9bb5'], ['베이지', '#d9cbb4'], ['카키', '#8a8a5c'], ['브라운', '#7a5a44'], ['블랙', '#2f2a27'], ['아이보리', '#f4efe6'], ['그레이', '#8c8c90']];
+const SHOE_COLORS = ['#4a3b33', '#f4efe6', '#2a2a2a', '#c96f5a', '#7d9fd6', '#d9b45a'];
+const DRESS_COLORS = [['더스티 핑크', '#c9a6bb', '#b98aa4'], ['라벤더', '#b3a2db', '#8f7cc0'], ['민트', '#a7d6c3', '#6fae98'], ['하늘', '#a9c6ee', '#7d9fd6'],
+  ['레몬', '#f2dc8e', '#d9b45a'], ['피치', '#f3b39c', '#d98a72'], ['아이보리', '#f4efe6', '#c9b7a6'], ['네이비', '#3f5570', '#2b3a52']];
 const CHIBI_S = .83;     // model units → metres (about the height of the old avatar)
 const CB = (() => {
   const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -55,9 +68,31 @@ const CB = (() => {
       let tot = 0; cand.forEach(c => { c.w = 1 / Math.pow(c.d + .012, 4); tot += c.w; });
       cand.forEach((c, k) => { si[i * 4 + k] = names.indexOf(c.b); sw[i * 4 + k] = c.w / tot; }); }
     geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4)); };
-  let G = null; const waiting = [], hairMats = new Map(), skinMats = new Map();
+  let G = null; const waiting = [], hairMats = new Map(), skinMats = new Map(), clothMats = new Map();
   const ready = gl => { if (G) return; G = {}; gl.scene.traverse(o => { if (o.isMesh){ const g = o.geometry; g.computeVertexNormals(); G[o.name] = g; if (o.name === 'face'){ const m = o.material; G.faceMat = new THREE.MeshStandardMaterial({ map: m.map, transparent: true, alphaTest: .05, depthWrite: false, roughness: .7, polygonOffset: true, polygonOffsetFactor: -2 }); if (m.map){ m.map.encoding = THREE.sRGBEncoding; m.map.anisotropy = 4; } } } });
-    smooth(G.body); skin(G.body); waiting.splice(0).forEach(f => f()); };
+    smooth(G.body); skin(G.body); makeShells(); let left = 2; const go = () => { if (--left === 0) waiting.splice(0).forEach(f => f()); }; loadOutfits(go); loadMaleHair(go); };
+  // socks, shoes and a hidden under-layer are offset copies of the body surface, so they bend with the same bones
+  function makeShells(){ const g = G.body, P = g.attributes.position, N = g.attributes.normal, idx = g.index.array, p = new THREE.Vector3();
+    const shell = (test, d) => { const pos = new Float32Array(P.count * 3); for (let i = 0; i < P.count; i++){ pos[i * 3] = P.getX(i) + N.getX(i) * d; pos[i * 3 + 1] = P.getY(i) + N.getY(i) * d; pos[i * 3 + 2] = P.getZ(i) + N.getZ(i) * d; }
+      const keep = []; for (let t = 0; t < idx.length; t += 3){ let ok = true; for (let q = 0; q < 3; q++){ p.fromBufferAttribute(P, idx[t + q]); if (!test(p)) ok = false; } if (ok) keep.push(idx[t], idx[t + 1], idx[t + 2]); }
+      const s = new THREE.BufferGeometry(); s.setAttribute('position', new THREE.BufferAttribute(pos, 3)); s.setAttribute('normal', N); s.setAttribute('skinIndex', g.attributes.skinIndex); s.setAttribute('skinWeight', g.attributes.skinWeight); s.setIndex(keep); return s; };
+    G.socks = shell(p => p.y < .2, .009); G.shoes = shell(p => p.y < .095, .024); G.under = shell(p => p.y > .58 && p.y < .8 && Math.abs(p.x) < .21, .008);
+    // long pants (boys): the hips and legs pushed out, a little wider towards the hem
+    { const pos = new Float32Array(P.count * 3); for (let i = 0; i < P.count; i++){ const y = P.getY(i), d = .02 + (y < .3 ? .018 * (.3 - y) / .2 : 0) + (y > .5 ? .004 : 0); pos[i * 3] = P.getX(i) + N.getX(i) * d; pos[i * 3 + 1] = y + N.getY(i) * d; pos[i * 3 + 2] = P.getZ(i) + N.getZ(i) * d; }
+      const keep = []; for (let t = 0; t < idx.length; t += 3){ let ok = true; for (let q = 0; q < 3; q++){ const y = P.getY(idx[t + q]); if (!(y > .085 && y < .625)) ok = false; } if (ok) keep.push(idx[t], idx[t + 1], idx[t + 2]); }
+      const s = new THREE.BufferGeometry(); s.setAttribute('position', new THREE.BufferAttribute(pos, 3)); s.setAttribute('normal', N); s.setAttribute('skinIndex', g.attributes.skinIndex); s.setAttribute('skinWeight', g.attributes.skinWeight); s.setIndex(keep); G.outfit_pants = s; } }
+  function loadMaleHair(done){ let left = MALE_HAIRS.length; const fin = () => { if (--left === 0) done(); };
+    MALE_HAIRS.forEach(k => { const url = 'chars/hair_' + k + '.glb', ok = gl => { let m; gl.scene.traverse(x => { if (x.isMesh && !m) m = x; }); m.geometry.computeVertexNormals(); G['hair_' + k] = m.geometry; fin(); };
+      if (!THREE.GLTFLoader) return fin(); const ld = new THREE.GLTFLoader(); ld.load(url, ok, undefined, () => {
+        fetch(url + '.txt').then(r => r.ok ? r.text() : Promise.reject()).then(b64 => { const bin = Uint8Array.from(atob(b64.trim()), c => c.charCodeAt(0)); ld.parse(bin.buffer, 'chars/', ok, fin); }).catch(fin); }); }); }
+  function loadOutfits(done){ let left = OUTFITS.length; const fin = () => { if (--left === 0) done(); };
+    OUTFITS.forEach(o => { const url = 'chars/outfits/' + o.key + '.glb', ok = gl => { let m; gl.scene.traverse(x => { if (x.isMesh && !m) m = x; }); const g = m.geometry; g.computeVertexNormals(); skin(g);
+        // skirt below the waist follows the hips and, lower down, partly the thigh on its side
+        const P = g.attributes.position, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, BI = n => names.indexOf(n);
+        if (o.key === 'dress' || o.key === 'skirt') for (let i = 0; i < P.count; i++) if (P.getY(i) < .63){ const t = Math.min(1, (.63 - P.getY(i)) / .43), w = .6 * Math.pow(t, 1.3); SI.setXYZW(i, BI('hips'), BI(P.getX(i) >= 0 ? 'thigh.L' : 'thigh.R'), 0, 0); SW.setXYZW(i, 1 - w, w, 0, 0); }
+        G['outfit_' + o.key] = g; fin(); };
+      if (!THREE.GLTFLoader) return fin(); const ld = new THREE.GLTFLoader(); ld.load(url, ok, undefined, () => {
+        fetch(url + '.txt').then(r => r.ok ? r.text() : Promise.reject()).then(b64 => { const bin = Uint8Array.from(atob(b64.trim()), c => c.charCodeAt(0)); ld.parse(bin.buffer, 'chars/', ok, fin); }).catch(fin); }); }); }
   // vertices at the same spot share one normal, so the body shades smoothly instead of showing facet lines
   function smooth(geo){ const P = geo.attributes.position, N = geo.attributes.normal, key = i => `${P.getX(i).toFixed(4)},${P.getY(i).toFixed(4)},${P.getZ(i).toFixed(4)}`, acc = new Map(), idx = geo.index ? geo.index.array : null, cnt = idx ? idx.length : P.count;
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), fn = new THREE.Vector3();
@@ -76,9 +111,15 @@ const CB = (() => {
     body.add(B.hips); body.bind(new THREE.Skeleton(names.map(nm => B[nm]))); body.castShadow = true; body.receiveShadow = true; body.frustumCulled = false;
     const hm = matFor(hairMats, a.L.hair, { roughness: .6, side: THREE.DoubleSide }), key = HAIR_KEYS[a.L.style];
     const onHead = (geo, m, cast) => { const o = new THREE.Mesh(geo, m); o.position.copy(J.head).negate(); o.castShadow = cast; B.head.add(o); return o; };
-    onHead(G['hair_' + key], hm, true); onHead(key === 'braid' ? G.scalpLo : G.scalp, hm, false); onHead(G.face, G.faceMat, false).renderOrder = 1;
+    if (G['hair_' + key]) onHead(G['hair_' + key], hm, true); if (!MALE_HAIRS.includes(key)) onHead(key === 'braid' ? G.scalpLo : G.scalp, hm, false); onHead(G.face, G.faceMat, false).renderOrder = 1;
     B['hand.L'].add(a.holder); a.holder.position.set(.05, .01, .045);
     a.g.add(body); a.B = B;
+    // outfit
+    const L = a.L, dc = DRESS_COLORS[L.outfitC], cloth = hex => matFor(clothMats, hex, { roughness: .9, side: THREE.DoubleSide, skinning: true });
+    const wear = (geo, m) => { if (!geo) return; const o = new THREE.SkinnedMesh(geo, m); o.bind(body.skeleton, body.bindMatrix); o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; a.g.add(o); };
+    if (L.dress){ const cm = cloth(dc[1]); wear(G.outfit_dress, cm); wear(G.under, cm); }
+    else { wear(G['outfit_' + L.top], cloth(TOP_COLORS[L.topC][1])); wear(G['outfit_' + L.bottom], cloth(BOTTOM_COLORS[L.botC][1])); }
+    wear(G.socks, matFor(clothMats, '#fbf6f0', { roughness: .85, skinning: true })); wear(G.shoes, matFor(clothMats, L.dress ? dc[2] : SHOE_COLORS[L.shoeC], { roughness: .45, skinning: true }));
   };
   return { J, whenReady: f => { if (G) f(); else waiting.push(f); }, dress };
 })();
@@ -91,7 +132,8 @@ function makeAvatar(seed){
   CB.whenReady(() => CB.dress(a));
   return a;
 }
-const SIT_DROP = HIP - .06; // seat surface → avatar origin (× size)
+const SIT_DROP = HIP - .06;
+const lookColor = L => L.dress ? DRESS_COLORS[L.outfitC][1] : TOP_COLORS[L.topC][1]; // name-tag dot: the outfit colour // seat surface → avatar origin (× size)
 
 /* snacks you can hold */
 const ITEMS = [

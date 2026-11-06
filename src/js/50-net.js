@@ -19,7 +19,7 @@ function handlePeers(list){
     const name = pr.n.replace(/[\u0000-\u001f]/g, '').slice(0, 10) || '손님';
     if (!r){ r = { key: p.peer, a: null, name: '', seed: -1, tgt: V(0, 0, 0), rot: 0, moving: false, seat: -1, rd: -1, rs: -1, rc: 0, q: 0, w: 0, et: 0, first: true }; remotes.set(p.peer, r); }
     if (r.seed !== seed){ const old = r.a; const a = makeAvatar(seed); scene.add(a.g); if (old){ a.pos.copy(old.pos); a.g.rotation.y = old.g.rotation.y; setItem(a, old.item, old.itemColor); scene.remove(old.g); removeTag(old); } r.a = a; r.seed = seed; r.name = ''; }
-    if (r.name !== name){ r.name = name; setLabel(r.a, name, r.a.L.hair); }
+    if (r.name !== name){ r.name = name; setLabel(r.a, name, lookColor(r.a.L)); }
     r.tgt.set(num(pr.x, -80, 80, 0), num(pr.y, -2, 60, 0), num(pr.z, -120, 60, 0)); r.rot = num(pr.r, -10, 10, 0); r.moving = pr.mv === 1;
     if (r.first && typeof pr.x === 'number'){ r.a.pos.copy(r.tgt); r.first = false; }
     const si = num(pr.s, -1, seats.length - 1, -1) | 0;
@@ -42,8 +42,8 @@ function updateCount(){
 function renderPeople(){
   const ul = $('#peopleList'), keep = ul.scrollTop; ul.textContent = '';
   const rows = [];
-  if (entered && me) rows.push({ name: myName, color: me.L.hair, where: whereText(myRide.id, myRide.queued, me.seat), me: true });
-  [...remotes.values()].filter(r => r.a && r.name).sort((a, b) => a.name.localeCompare(b.name, 'ko')).forEach(r => rows.push({ name: r.name, color: r.a.L.hair, where: whereText(r.rd, r.q, r.seat), me: false }));
+  if (entered && me) rows.push({ name: myName, color: lookColor(me.L), where: whereText(myRide.id, myRide.queued, me.seat), me: true });
+  [...remotes.values()].filter(r => r.a && r.name).sort((a, b) => a.name.localeCompare(b.name, 'ko')).forEach(r => rows.push({ name: r.name, color: lookColor(r.a.L), where: whereText(r.rd, r.q, r.seat), me: false }));
   rows.forEach(p => {
     const li = document.createElement('li'); if (p.me) li.className = 'me';
     const av = document.createElement('span'); av.className = 'av'; av.style.background = p.color; { const c = new THREE.Color(p.color); av.style.color = (c.r * .299 + c.g * .587 + c.b * .114) < .55 ? '#fff8ee' : 'rgba(30,20,14,.82)'; } av.textContent = [...p.name][0] || '?';
@@ -131,7 +131,9 @@ try {
   pv.scene.add(new THREE.HemisphereLight(C('#fff1e0'), C('#7a6070'), .9)); const dl = new THREE.DirectionalLight(C('#ffd2a8'), .9); dl.position.set(2, 3, 4); pv.scene.add(dl);
   pv.cam.position.set(0, .86, 2.9); pv.cam.lookAt(0, .7, 0);
 } catch (e) { pv.r = null; }
-function hairText(L){ return `${HAIR_NAMES[L.style]} · ${HAIR_COLORS[L.hairIdx][0]} 머리`; }
+function hairText(L){ const BN = { pants: '긴바지', short: '반바지', skirt: '플리츠 치마' }, TN = { tshirt: '티셔츠', tank: '나시' };
+  const wear = L.dress ? `${DRESS_COLORS[L.outfitC][0]} 드레스` : `${TOP_COLORS[L.topC][0]} ${TN[L.top]} · ${BOTTOM_COLORS[L.botC][0]} ${BN[L.bottom]}`;
+  return `${HAIR_NAMES[L.style]} · ${HAIR_COLORS[L.hairIdx][0]} 머리 · ${wear}`; }
 function showPreview(){ if (pv.a) pv.scene.remove(pv.a.g); pv.a = makeAvatar(mySeed); pv.scene.add(pv.a.g); $('#lookDesc').textContent = hairText(pv.a.L); }
 showPreview();
 $('#reroll').onclick = () => { mySeed = newSeed(); showPreview(); };
@@ -141,7 +143,7 @@ $('#enter').onclick = enter;
 function enter(){
   if (entered) return;
   myName = ($('#nick').value.replace(/\s+/g, ' ').trim() || myName).slice(0, 10); store.set('park-name', myName); store.set('park-seed', String(mySeed));
-  me = makeAvatar(mySeed); scene.add(me.g); setLabel(me, myName, me.L.hair);
+  me = makeAvatar(mySeed); scene.add(me.g); setLabel(me, myName, lookColor(me.L));
   me.pos.set(rand(-1.5, 1.5), 0, 30.5); me.rot = Math.PI; me.g.rotation.y = Math.PI; walkTo(V(me.pos.x * .5, 0, 25));
   entered = true; $('#entry').hidden = true; $('#hud').hidden = false; $('#tags').hidden = false;
   cam.mode = 'follow'; cam.theta = 0; cam.phi = .36; cam.dist = 13;
@@ -270,6 +272,7 @@ function frame(){
       el.textContent = txt; el.hidden = false; } else el.hidden = true; }
 
   // name tags & bubbles
+  tagLayer.hidden = !entered || (photo.on && !photo.tags);
   if (entered){
     if (me) placeTag(me, me.g, 1.5 * me.L.size, me.g.visible, now);
     for (const r of remotes.values()) placeTag(r.a, r.a.g, 1.5 * r.a.L.size, r.a.g.visible, now);
@@ -284,7 +287,7 @@ addEventListener('resize', fitView); addEventListener('orientationchange', () =>
 if (window.visualViewport) visualViewport.addEventListener('resize', fitView);
 
 // debug hooks for automated checks (harmless in production)
-window.__park = { skew(s){ clockSkew += s * 1000; }, cycleAt, walkTo: p => walkTo(new THREE.Vector3(p[0], p[1], p[2])), groundH, rides, get me(){ return me; }, myRide, remotes, goToRide, enter, nowS, cam, setCamMode, toast, get room(){ return room; } };
+window.__park = { photo, skew(s){ clockSkew += s * 1000; }, cycleAt, walkTo: p => walkTo(new THREE.Vector3(p[0], p[1], p[2])), groundH, rides, get me(){ return me; }, myRide, remotes, goToRide, enter, nowS, cam, setCamMode, toast, get room(){ return room; } };
 
 let started = false;
 const startNow = () => { if (started) return; started = true; redrawFontTex(); tickClock(); applyEnv(envTo); envT = 1; frame(); };
