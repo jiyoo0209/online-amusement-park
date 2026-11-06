@@ -23,6 +23,8 @@ try { new vm.Script(app, { filename: 'app.js' }); } catch (e) { console.error('S
 const vendor = [
   ['node_modules/three/build/three.min.js', 'three.min.js'],
   ['node_modules/three/examples/js/loaders/GLTFLoader.js', 'GLTFLoader.js'],
+  ['node_modules/three/examples/js/utils/BufferGeometryUtils.js', 'BufferGeometryUtils.js'],
+  ['node_modules/three/examples/js/environments/RoomEnvironment.js', 'RoomEnvironment.js'],
   ['node_modules/@supabase/supabase-js/dist/umd/supabase.js', 'supabase.js'],
 ];
 const tags = vendor.map(([src, name]) => { const buf = readFileSync(join(root, src)); writeFileSync(join(dist, 'vendor', name), buf); const h = createHash('sha1').update(buf).digest('hex').slice(0, 8); return `<script src="vendor/${name}?v=${h}"></script>`; }).join('\n');

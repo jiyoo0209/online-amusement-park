@@ -287,22 +287,16 @@ const coaster = (() => {
     surf(1.9, 4.1, -26.05, -23.6, (x, z) => clamp((-23.6 - z) / 2.45, 0, 1) * 1.35);
     AREAS.push({ x0: -12, x1: 9, z0: -28.65, z1: -23.6, top: V(3, 1.35, -26.4), bottom: V(3, 0, -23.1) });
     obR(-12.5, 10.5, -32.8, -28.7); }
-  // train: 4 cars × 4 seats
+  // train: 4 red racer cars × 4 seats (models in 15-coaster-car.js)
   const CARS = 4, GAP = 2.55, cars = [], seats = [];
-  const carCols = ['#d9473f', '#f2c443', '#d9473f', '#f2c443'];
   for (let c = 0; c < CARS; c++){
-    const g = grp(root); const cm = M(carCols[c], { roughness: .35, metalness: .25 });
-    box(1.55, .55, 2.25, cm, g, 0, .12, 0); box(1.55, .55, .16, cm, g, 0, .62, -1.05); box(1.55, .55, .16, cm, g, 0, .62, .25);
-    if (c === 0){ const nose = mesh(new THREE.SphereGeometry(.8, 14, 10, 0, TAU, 0, Math.PI / 2), cm, g, 0, .4, 1.05); nose.rotation.x = Math.PI / 2; nose.scale.set(1, 1, .65); sph(.12, mat.bulb, g, .45, .55, 1.5, 8); sph(.12, mat.bulb, g, -.45, .55, 1.5, 8); }
-    for (const sx of [-.38, .38]){ box(.62, .35, .62, mat.navy, g, sx, .55, -.65); box(.62, .35, .62, mat.navy, g, sx, .55, .65); }
-    for (const z of [-.5, .8]){ const bar = mesh(new THREE.TorusGeometry(.45, .05, 6, 12, Math.PI), mat.darkSteel, g, 0, 1.1, z, false); bar.rotation.z = 0; }
-    for (const sx of [-.6, .6]) for (const z of [-.8, .8]) { const w = mesh(new THREE.CylinderGeometry(.14, .14, .12, 10), mat.darkSteel, g, sx, -.05, z, false); w.rotation.z = Math.PI / 2; }
-    for (const z of [.65, -.65]) for (const sx of [-.38, .38]) seats.push(seatMarker(g, sx, .9, z));
+    const g = grp(root), b = buildCoasterCar(c, CARS); g.add(b.group);
+    b.seats.forEach(p => seats.push(seatMarker(g, p.x, p.y, p.z)));
     cars.push(g);
   }
   const R = { load: 14, run: RUN, offset: 0 };
   const r = cycleRide(Object.assign(R, { id: 'coaster', name: '롤러코스터', emoji: '🎢', desc: `길이 ${Math.round(LEN)}m · 최고 ${Math.round(P[crest].y)}m 높이`, root, seats,
-    entrance: V(1.2, 1.35, -27.4), exit: V(6.2, 1.35, -27.4), board: V(1.2, 1.4, -29.5), camDist: 12, pov: true, density: .5 }));
+    entrance: V(1.2, 1.35, -27.4), exit: V(6.2, 1.35, -27.4), board: V(1.2, 1.4, -29.5), camDist: 12, pov: true, density: .5, povUp: 1.95, povBack: 1.5 }));
   // where the front car is (distance along the track from the station stop) at time t
   const frontAt = t => { const s = cycleAt(r, t); if (s.load) return 0; const u = Math.min(s.u, tim[N]); let lo = 0, hi = N; while (hi - lo > 1){ const m = (lo + hi) >> 1; if (tim[m] <= u) lo = m; else hi = m; } const k = (u - tim[lo]) / Math.max(1e-4, tim[hi] - tim[lo]); return (lo + k) * ds; };
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), tmpX = V(0, 0, 0), tmpU = V(0, 0, 0), tmpT = V(0, 0, 0), tmpP = V(0, 0, 0), one = V(1, 1, 1);
