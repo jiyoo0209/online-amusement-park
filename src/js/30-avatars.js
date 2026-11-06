@@ -97,23 +97,28 @@ const SIT_DROP = HIP - .06; // seat surface → avatar origin (× size)
 const ITEMS = [
   { name: '솜사탕', desc: '구름처럼 폭신한 딸기 솜사탕', price: '3,000', emoji: '🍭' },
   { name: '츄러스', desc: '설탕 듬뿍 시나몬 츄러스', price: '3,500', emoji: '🥖' },
-  { name: '빨간 풍선', desc: '하늘로 둥실, 놓치지 마세요', price: '2,000', emoji: '🎈' },
-  { name: '하늘색 풍선', desc: '구름 색 풍선', price: '2,000', emoji: '🎈' },
+  { name: '풍선', desc: '어떤 색이 나올지는 받아 봐야 알아요', price: '2,000', emoji: '🎈', balloon: true },
   { name: '아이스크림', desc: '바닐라 소프트콘', price: '2,500', emoji: '🍦' },
   { name: '핫도그', desc: '케첩 지그재그 핫도그', price: '3,000', emoji: '🌭' },
 ];
-function makeItem(i){
+const BALLOON = ITEMS.findIndex(it => it.balloon);
+/* balloon colors: picked at random each time you buy one (synced so everyone sees the same color) */
+const BALLOON_COLORS = [['빨간', '#ff5a5a'], ['주황', '#ff9a3c'], ['노란', '#ffd43b'], ['연두', '#a9e34b'], ['초록', '#40c057'], ['민트', '#63e6be'],
+  ['하늘색', '#7cc4ff'], ['파란', '#3b7dff'], ['남색', '#4c4fd6'], ['보라', '#9b6bff'], ['라벤더', '#d0bfff'], ['분홍', '#ff8fd0'],
+  ['핫핑크', '#f03e8c'], ['코랄', '#ff8a7a'], ['살구', '#ffc9a0'], ['하얀', '#f8f6f0'], ['금색', '#e8b64a'], ['은색', '#c9d1db']];
+const isBalloon = i => i === BALLOON;
+function makeItem(i, bc = 0){
   const g = new THREE.Group();
   if (i === 0){ cyl(.012, .012, .28, M('#f4ecdf'), g, 0, -.12, 0, 5); const c = sph(.13, M('#f7a8c8', { roughness: 1 }), g, 0, .2, 0, 12); c.scale.set(1, 1.15, 1); sph(.08, M('#fbc4dc', { roughness: 1 }), g, .07, .26, .04, 8); }
   else if (i === 1){ const c = mesh(new THREE.CylinderGeometry(.03, .032, .42, 7), M('#c98a4a', { roughness: .8 }), g, 0, .12, 0); c.rotation.z = .12; }
-  else if (i === 2 || i === 3){ const col = i === 2 ? '#ff5a5a' : '#7cc4ff'; const s = new THREE.Group(); g.add(s); s.userData.balloon = true;
+  else if (i === BALLOON){ const col = (BALLOON_COLORS[bc] || BALLOON_COLORS[0])[1]; const s = new THREE.Group(); g.add(s); s.userData.balloon = true;
     beam(V(0, 0, 0), V(0, 1.0, 0), .004, M('#ffffff'), s, 3, false); const b = sph(.22, M(col, { roughness: .25 }), s, 0, 1.22, 0, 14); b.scale.y = 1.18; mesh(new THREE.ConeGeometry(.04, .06, 6), M(col), s, 0, .98, 0, false).rotation.x = Math.PI; }
-  else if (i === 4){ const c = mesh(new THREE.ConeGeometry(.055, .18, 10), M('#d9a35a'), g, 0, 0, 0); c.rotation.x = Math.PI; sph(.065, M('#fff6e6', { roughness: .6 }), g, 0, .11, 0, 10); const tip = mesh(new THREE.ConeGeometry(.04, .08, 10), M('#fff6e6'), g, 0, .18, 0); }
-  else if (i === 5){ cyl(.008, .008, .12, M('#e8d8b8'), g, 0, -.1, 0, 4); const d = cyl(.035, .035, .2, M('#d98a3c'), g, 0, 0, 0, 8); cyl(.025, .025, .23, M('#b4452f'), g, 0, -.015, 0, 8); }
+  else if (i === 3){ const c = mesh(new THREE.ConeGeometry(.055, .18, 10), M('#d9a35a'), g, 0, 0, 0); c.rotation.x = Math.PI; sph(.065, M('#fff6e6', { roughness: .6 }), g, 0, .11, 0, 10); const tip = mesh(new THREE.ConeGeometry(.04, .08, 10), M('#fff6e6'), g, 0, .18, 0); }
+  else if (i === 4){ cyl(.008, .008, .12, M('#e8d8b8'), g, 0, -.1, 0, 4); const d = cyl(.035, .035, .2, M('#d98a3c'), g, 0, 0, 0, 8); cyl(.025, .025, .23, M('#b4452f'), g, 0, -.015, 0, 8); }
   g.traverse(o => { if (o.isMesh) o.castShadow = false; });
   return g;
 }
-function setItem(a, i){ if (a.item === i) return; a.item = i; if (a.itemObj){ a.holder.remove(a.itemObj); a.itemObj = null; } if (i >= 0 && ITEMS[i]){ a.itemObj = makeItem(i); a.holder.add(a.itemObj); } }
+function setItem(a, i, bc = 0){ if (!isBalloon(i)) bc = 0; if (a.item === i && (a.itemColor || 0) === bc) return; a.item = i; a.itemColor = bc; if (a.itemObj){ a.holder.remove(a.itemObj); a.itemObj = null; } if (i >= 0 && ITEMS[i]){ a.itemObj = makeItem(i, bc); a.holder.add(a.itemObj); } }
 
 /* names and speech bubbles are HTML laid over the canvas, so they keep the same size at any zoom */
 const tagLayer = $('#tags');
@@ -163,7 +168,7 @@ function poseAvatar(a, dt, t){
   B.neck.rotation.y = a.moving || a.rideP ? 0 : Math.sin(t * .35 + a.phase) * .3;
   B.head.rotation.z += Math.sin(t * .5 + a.phase * 2) * .04;
   // snack in the left hand (a sip/bite now and then)
-  if (a.itemObj){ const balloon = a.item === 2 || a.item === 3; const bite = !balloon && !a.moving && Math.sin(t * .4 + a.phase) > .93; uaL = balloon ? [-.35, 0, -.9] : bite ? [-.95, 0, -.95] : [-.55, 0, -1.15]; faL = balloon ? [0, -.7, 0] : bite ? [0, -1.95, 0] : [0, -1.3, 0]; }
+  if (a.itemObj){ const balloon = isBalloon(a.item); const bite = !balloon && !a.moving && Math.sin(t * .4 + a.phase) > .93; uaL = balloon ? [-.35, 0, -.9] : bite ? [-.95, 0, -.95] : [-.55, 0, -1.15]; faL = balloon ? [0, -.7, 0] : bite ? [0, -1.95, 0] : [0, -1.3, 0]; }
   // hands up on drops and big swings
   const hu = a.handsK;
   if (hu > .01){ const w = Math.sin(t * 9) * .12 * hu; uaL = mix3(uaL, [-.25, 0, 1.25 + w], hu); uaR = mix3(uaR, [-.25, 0, -1.25 - w], hu); faL = mix3(faL, [0, 0, .25], hu); faR = mix3(faR, [0, 0, -.25], hu); B.head.rotation.x -= .25 * hu; }
@@ -176,5 +181,5 @@ function poseAvatar(a, dt, t){
   R('upperArm.L', ...uaL); R('upperArm.R', ...uaR); R('foreArm.L', ...faL); R('foreArm.R', ...faR);
   // keep snacks upright whatever the arm is doing (balloons also sway)
   if (a.itemObj){ a.holder.parent.getWorldQuaternion(_q1).invert(); a.g.getWorldQuaternion(_q2); if (a.rideP) _q2.identity(); a.holder.quaternion.copy(_q1.multiply(_q2));
-    if (a.item === 2 || a.item === 3){ const b = a.itemObj.children[0]; b.rotation.z = Math.sin(t * 1.3 + a.phase) * .12; b.rotation.x = Math.cos(t * 1.1 + a.phase) * .1; } }
+    if (isBalloon(a.item)){ const b = a.itemObj.children[0]; b.rotation.z = Math.sin(t * 1.3 + a.phase) * .12; b.rotation.x = Math.cos(t * 1.1 + a.phase) * .1; } }
 }

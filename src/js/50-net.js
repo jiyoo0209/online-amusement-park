@@ -5,7 +5,7 @@ function sendPresence(now){
   if (!room || !me || !presenceDirty || now - lastSent < 110) return; presenceDirty = false; lastSent = now;
   const r2 = v => Math.round(v * 100) / 100;
   const riding = myRide.id >= 0 && !myRide.queued;
-  room.presence({ n: myName, ap: mySeed, x: r2(me.pos.x), y: r2(me.pos.y), z: r2(me.pos.z), r: r2(me.rot), mv: me.moving ? 1 : 0, s: me.seat, i: me.item, w: myWave, em: myEmo, et: myEmoT,
+  room.presence({ n: myName, ap: mySeed, x: r2(me.pos.x), y: r2(me.pos.y), z: r2(me.pos.z), r: r2(me.rot), mv: me.moving ? 1 : 0, s: me.seat, i: me.item, bc: me.itemColor || 0, w: myWave, em: myEmo, et: myEmoT,
     rd: myRide.id, rs: riding ? myRide.seat : -1, rc: myRide.rec, q: myRide.queued ? 1 : 0 }).catch(() => {});
 }
 const num = (v, a, b, d) => (typeof v === 'number' && isFinite(v)) ? clamp(v, a, b) : d;
@@ -18,14 +18,14 @@ function handlePeers(list){
     const seed = (num(pr.ap, 1, 2147483647, 1)) | 0;
     const name = pr.n.replace(/[\u0000-\u001f]/g, '').slice(0, 10) || '손님';
     if (!r){ r = { key: p.peer, a: null, name: '', seed: -1, tgt: V(0, 0, 0), rot: 0, moving: false, seat: -1, rd: -1, rs: -1, rc: 0, q: 0, w: 0, et: 0, first: true }; remotes.set(p.peer, r); }
-    if (r.seed !== seed){ const old = r.a; const a = makeAvatar(seed); scene.add(a.g); if (old){ a.pos.copy(old.pos); a.g.rotation.y = old.g.rotation.y; setItem(a, old.item); scene.remove(old.g); removeTag(old); } r.a = a; r.seed = seed; r.name = ''; }
+    if (r.seed !== seed){ const old = r.a; const a = makeAvatar(seed); scene.add(a.g); if (old){ a.pos.copy(old.pos); a.g.rotation.y = old.g.rotation.y; setItem(a, old.item, old.itemColor); scene.remove(old.g); removeTag(old); } r.a = a; r.seed = seed; r.name = ''; }
     if (r.name !== name){ r.name = name; setLabel(r.a, name, r.a.L.hair); }
     r.tgt.set(num(pr.x, -80, 80, 0), num(pr.y, -2, 60, 0), num(pr.z, -120, 60, 0)); r.rot = num(pr.r, -10, 10, 0); r.moving = pr.mv === 1;
     if (r.first && typeof pr.x === 'number'){ r.a.pos.copy(r.tgt); r.first = false; }
     const si = num(pr.s, -1, seats.length - 1, -1) | 0;
     if (si !== r.seat){ if (r.seat >= 0 && seats[r.seat]) seats[r.seat].occRemote = false; r.seat = si; if (si >= 0) seats[si].occRemote = true; }
     r.rd = num(pr.rd, -1, rides.length - 1, -1) | 0; r.rs = r.rd >= 0 ? num(pr.rs, -1, rides[r.rd].seats.length - 1, -1) | 0 : -1; r.rc = num(pr.rc, -1e9, 1e12, 0); r.q = pr.q === 1 ? 1 : 0;
-    setItem(r.a, num(pr.i, -1, ITEMS.length - 1, -1) | 0);
+    setItem(r.a, num(pr.i, -1, ITEMS.length - 1, -1) | 0, num(pr.bc, 0, BALLOON_COLORS.length - 1, 0) | 0);
     const w = num(pr.w, 0, 1e15, 0); if (w && w !== r.w){ if (r.w) r.a.waveUntil = performance.now() + 2200; r.w = w; }
     const et = num(pr.et, 0, 1e15, 0); if (et && et !== r.et){ if (Date.now() - et < 5000 && EMOJIS.includes(pr.em)) say(r.a, pr.em, 3200, true); r.et = et; }
   }
@@ -64,7 +64,7 @@ document.addEventListener('pointerdown', e => { const t = e.target, inEl = sel =
   if (!$('#soundPop').hidden && !inEl('#soundBtn')) setSoundOpen(false);
   if (!$('#rideMenu').hidden && !inEl('#rideChip')) setRideMenuOpen(false);
   if (!$('#emoPop').hidden && !inEl('#bEmo')) setEmoOpen(false); });
-addEventListener('keydown', e => { if (e.key === 'Escape'){ setPeopleOpen(false); setSoundOpen(false); setRideMenuOpen(false); setEmoOpen(false); $('#menu').hidden = true; } });
+addEventListener('keydown', e => { if (e.key === 'Escape'){ setPeopleOpen(false); setSoundOpen(false); setRideMenuOpen(false); setEmoOpen(false); closeMenu(); } });
 
 // Supabase Realtime: presence carries name + look (slow-changing); position, ride seat and actions go over broadcast, throttled.
 function makeSupabaseRoom(cfg){

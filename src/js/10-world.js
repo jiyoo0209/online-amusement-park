@@ -237,9 +237,9 @@ const snackCart = (() => {
 const balloonStand = (() => {
   const g = grp(scene, -9.5, 0, 21.5);
   cyl(.06, .06, 2.4, mat.steel, g, 0, 0, 0, 6); cyl(.4, .5, .5, mat.navy, g, 0, 0, 0, 12);
-  const cols = ['#ff6b6b', '#ffd166', '#4dabf7', '#b197fc', '#63e6be', '#ff8fd0', '#ffa94d'];
+  const cols = ['#ff5a5a', '#ffd43b', '#3b7dff', '#9b6bff', '#63e6be', '#ff8fd0', '#ff9a3c', '#a9e34b', '#7cc4ff', '#f03e8c', '#e8b64a', '#d0bfff', '#40c057', '#ff8a7a'];
   const balloons = [];
-  for (let i = 0; i < 9; i++){ const a = i / 9 * TAU, r = .5 + (i % 3) * .25, y = 3.4 + (i % 4) * .35;
+  for (let i = 0; i < 14; i++){ const a = i / 14 * TAU + (i % 2) * .2, r = .5 + (i % 3) * .25, y = 3.4 + (i % 4) * .35;
     const b = sph(.32, M(cols[i % cols.length], { roughness: .3 }), g, Math.cos(a) * r, y, Math.sin(a) * r, 12); b.scale.y = 1.18;
     beam(V(0, 2.4, 0), V(Math.cos(a) * r, y - .35, Math.sin(a) * r), .006, mat.white, g, 3, false); balloons.push(b); }
   act(g, { type: 'snack' }); obC(-9.5, 21.5, .9);

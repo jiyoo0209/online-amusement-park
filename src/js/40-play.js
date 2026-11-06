@@ -194,16 +194,30 @@ function renderRideMenu(){
   });
 }
 let rideMenuT = 0;
+// the joystick hides while the ride list, emoji strip or snack menu is open
+function syncJoy(){ const covered = !$('#rideMenu').hidden || !$('#emoPop').hidden || !$('#menu').hidden; if (covered) cancelJoy(); joy.el.style.visibility = covered ? 'hidden' : ''; }
 function setRideMenuOpen(open){ if (open){ setPeopleOpen(false); setSoundOpen(false); setEmoOpen(false); cancelJoy(); renderRideMenu(); clearInterval(rideMenuT); rideMenuT = setInterval(renderRideMenu, 500); } else clearInterval(rideMenuT);
-  $('#rideMenu').hidden = !open; $('#rideChip').setAttribute('aria-expanded', open); joy.el.style.visibility = open ? 'hidden' : ''; }
+  $('#rideMenu').hidden = !open; $('#rideChip').setAttribute('aria-expanded', open); syncJoy(); }
 $('#rideChip').addEventListener('click', e => { e.stopPropagation(); setRideMenuOpen($('#rideMenu').hidden); });
 $('#rideMenu').addEventListener('pointerdown', e => e.stopPropagation());
 
 // emoji
 const EMOJIS = [...document.querySelectorAll('#emoPop [data-e]')].map(b => b.dataset.e);
-function setEmoOpen(open){ if (open){ setPeopleOpen(false); setSoundOpen(false); setRideMenuOpen(false); cancelJoy(); } $('#emoPop').hidden = !open; $('#bEmo').setAttribute('aria-expanded', open); joy.el.style.visibility = open ? 'hidden' : ''; }
+function setEmoOpen(open){ if (open){ setPeopleOpen(false); setSoundOpen(false); setRideMenuOpen(false); cancelJoy(); } $('#emoPop').hidden = !open; $('#bEmo').setAttribute('aria-expanded', open); if (open) syncEmoFade(); syncJoy(); }
 $('#bEmo').addEventListener('click', e => { e.stopPropagation(); setEmoOpen($('#emoPop').hidden); });
 $('#emoPop').addEventListener('pointerdown', e => e.stopPropagation());
+const emoStrip = $('#emoPop .strip');
+function syncEmoFade(){ const max = emoStrip.scrollWidth - emoStrip.clientWidth; $('#emoPop').classList.toggle('more-l', emoStrip.scrollLeft > 2); $('#emoPop').classList.toggle('more-r', emoStrip.scrollLeft < max - 2); $('#emoPop').classList.toggle('scrolls', max > 2); }
+emoStrip.addEventListener('scroll', syncEmoFade, { passive: true });
+addEventListener('resize', () => { if (!$('#emoPop').hidden) syncEmoFade(); });
+emoStrip.addEventListener('wheel', e => { if (emoStrip.scrollWidth <= emoStrip.clientWidth) return; const d = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX; if (!d) return; e.preventDefault(); emoStrip.scrollLeft += d * (e.deltaMode === 1 ? 32 : 1); }, { passive: false });
+const emoDrag = { id: null, x: 0, sl: 0, moved: false };
+emoStrip.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' || e.button !== 0) return; emoDrag.id = e.pointerId; emoDrag.x = e.clientX; emoDrag.sl = emoStrip.scrollLeft; emoDrag.moved = false; });
+emoStrip.addEventListener('pointermove', e => { if (e.pointerId !== emoDrag.id) return; const dx = e.clientX - emoDrag.x; if (!emoDrag.moved && Math.abs(dx) > 5){ emoDrag.moved = true; try { emoStrip.setPointerCapture(e.pointerId); } catch (_){} emoStrip.classList.add('drag'); } if (emoDrag.moved) emoStrip.scrollLeft = emoDrag.sl - dx; });
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => emoStrip.addEventListener(t, e => { if (e.pointerId !== emoDrag.id) return; emoDrag.id = null; emoStrip.classList.remove('drag'); }));
+// a drag that scrolled the strip shouldn't also send the emoji under the mouse
+emoStrip.addEventListener('click', e => { if (emoDrag.moved){ emoDrag.moved = false; e.stopPropagation(); e.preventDefault(); } }, true);
+$('#emoPop').querySelectorAll('.nav').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); emoStrip.scrollBy({ left: (b.dataset.dir === 'l' ? -1 : 1) * emoStrip.clientWidth * .7, behavior: 'smooth' }); }));
 $('#emoPop').addEventListener('click', e => { const b = e.target instanceof Element && e.target.closest('[data-e]'); if (!b || !me) return; myEmo = b.dataset.e; myEmoT = Date.now(); say(me, myEmo, 3200, true); pushPresence(true); setEmoOpen(false); });
 
 // snack menu
@@ -211,11 +225,17 @@ const ml = $('#menuList');
 ITEMS.forEach((it, i) => { const li = document.createElement('li'); const b = document.createElement('button'); b.type = 'button';
   b.innerHTML = `<span><i aria-hidden="true">${it.emoji}</i> ${it.name}<em>${it.desc}</em></span><span class="price">₩${it.price}</span>`; b.onclick = () => order(i); li.appendChild(b); ml.appendChild(li); });
 { const li = document.createElement('li'); const b = document.createElement('button'); b.type = 'button'; b.innerHTML = '<span>손 비우기<em>들고 있는 걸 내려놓아요</em></span>'; b.onclick = () => order(-1); li.appendChild(b); ml.appendChild(li); }
-function openMenu(){ if (!entered) return; $('#menu').hidden = false; }
-$('#menuClose').onclick = () => { $('#menu').hidden = true; };
-$('#menu').addEventListener('click', e => { if (e.target === $('#menu')) $('#menu').hidden = true; });
+function openMenu(){ if (!entered) return; setPeopleOpen(false); setSoundOpen(false); setRideMenuOpen(false); setEmoOpen(false); $('#menu').hidden = false; syncJoy(); }
+function closeMenu(){ $('#menu').hidden = true; syncJoy(); }
+$('#menuClose').onclick = () => closeMenu();
+$('#menu').addEventListener('click', e => { if (e.target === $('#menu')) closeMenu(); });
+$('#menu').addEventListener('pointerdown', e => e.stopPropagation());
 $('#bSnack').onclick = () => openMenu();
-function order(i){ $('#menu').hidden = true; if (!me) return; setItem(me, i); pushPresence(true); if (i >= 0){ toast(`${ITEMS[i].emoji} ${ITEMS[i].name} 받았어요`); chime(); } }
+function order(i){ closeMenu(); if (!me) return;
+  let bc = 0;
+  if (isBalloon(i)){ do { bc = (Math.random() * BALLOON_COLORS.length) | 0; } while (BALLOON_COLORS.length > 1 && isBalloon(me.item) && bc === me.itemColor); }
+  setItem(me, i, bc); pushPresence(true);
+  if (i >= 0){ toast(isBalloon(i) ? `🎈 ${BALLOON_COLORS[bc][0]} 풍선 받았어요` : `${ITEMS[i].emoji} ${ITEMS[i].name} 받았어요`); chime(); } }
 
 /* ---------- sound: carnival waltz + park ambience + ride wind ---------- */
 let AC = null, sfxG = null, musicG = null, windG = null, rumbleG = null, crowdG = null;
