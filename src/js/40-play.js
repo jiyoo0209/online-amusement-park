@@ -4,7 +4,14 @@ const newSeed = () => ((Math.random() * 2147483646) | 0) + 1;
 let mySeed = (() => { const v = parseInt(store.get('park-seed'), 10); return Number.isFinite(v) && v > 0 ? v : newSeed(); })();
 let myName = store.get('park-name') || ['솜사탕', '회전목마', '풍선', '츄러스', '팝콘', '퍼레이드', '꼬마기차', '불꽃놀이'][(Math.random() * 8) | 0] + ((Math.random() * 90 + 10) | 0);
 let me = null;
-const ctrl = { target: null, pendingSeat: -1, goRide: -1, stuck: 0, stuckT: 0 };
+const ctrl = { target: null, route: [], pendingSeat: -1, goRide: -1, stuck: 0, stuckT: 0 };
+// walk to a point, going down/up the stairs when it is on a different raised platform
+function walkTo(p){
+  const from = areaAt(me.pos.x, me.pos.z), to = areaAt(p.x, p.z), pts = [];
+  if (from && from !== to) pts.push(from.top.clone(), from.bottom.clone());
+  if (to && to !== from) pts.push(to.bottom.clone(), to.top.clone());
+  pts.push(p.clone()); ctrl.target = pts.shift(); ctrl.route = pts; ctrl.stuck = 0;
+}
 // my ride: id -1 = not on a ride. queued = waiting at the entrance for the next boarding
 const myRide = { id: -1, seat: -1, rec: 0, queued: false, at: 0, warned: 0 };
 let myWave = 0, myEmo = '', myEmoT = 0;
@@ -67,7 +74,7 @@ function onTap(x, y){
   if (!entered || !me) return;
   ndc.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(interactives, false).filter(h => isShown(h.object));
-  const plane = new THREE.Plane(_up, 0), fp = V(0, 0, 0), hitFloor = ray.ray.intersectPlane(plane, fp);
+  const plane = new THREE.Plane(_up, -me.pos.y), fp = V(0, 0, 0), hitFloor = ray.ray.intersectPlane(plane, fp);
   const fd = hitFloor ? camera.position.distanceTo(fp) : 1e9;
   const hit = hits.find(h => h.distance < fd + 1.5);
   if (hit && handleAct(hit.object.userData.act)) return;
@@ -75,8 +82,8 @@ function onTap(x, y){
   if (!hitFloor) return;
   if (fp.x < BOUNDS.x0 - 2 || fp.x > BOUNDS.x1 + 2 || fp.z < BOUNDS.z0 - 2 || fp.z > BOUNDS.z1 + 2) return;
   leaveQueue(); standUp(); ctrl.pendingSeat = -1; ctrl.goRide = -1;
-  ctrl.target = V(clamp(fp.x, BOUNDS.x0, BOUNDS.x1), 0, clamp(fp.z, BOUNDS.z0, BOUNDS.z1)); ctrl.stuck = 0;
-  ripple(ctrl.target);
+  const tx = clamp(fp.x, BOUNDS.x0, BOUNDS.x1), tz = clamp(fp.z, BOUNDS.z0, BOUNDS.z1);
+  walkTo(V(tx, groundH(tx, tz), tz)); ripple(V(tx, groundH(tx, tz), tz));
 }
 function handleAct(a){
   if (!a) return false;
@@ -85,7 +92,7 @@ function handleAct(a){
   if (a.type === 'bench'){
     const i = [a.i, a.i + 1].find(k => seats[k] && !seats[k].occ && !seats[k].occRemote);
     if (i == null){ if (me.seat === a.i || me.seat === a.i + 1) return true; toast('벤치에 자리가 없어요'); return true; }
-    leaveQueue(); standUp(); const s = seats[i]; ctrl.goRide = -1; ctrl.pendingSeat = i; ctrl.target = V(s.x + Math.sin(s.rot) * .6, 0, s.z + Math.cos(s.rot) * .6); ctrl.stuck = 0; return true;
+    leaveQueue(); standUp(); const s = seats[i]; ctrl.goRide = -1; walkTo(V(s.x + Math.sin(s.rot) * .6, 0, s.z + Math.cos(s.rot) * .6)); ctrl.pendingSeat = i; return true;
   }
   if (a.type === 'snack'){ openMenu(); return true; }
   return false;
@@ -101,7 +108,7 @@ function toast(t){ const el = $('#toast'); el.textContent = t; el.classList.add(
 
 /* ---------- benches ---------- */
 function placeSeated(a, i){ const s = seats[i]; a.seat = i; a.sit = true; a.pos.set(s.x, s.h - SIT_DROP * a.L.size, s.z); a.rot = s.rot; a.g.rotation.set(0, s.rot, 0); a.moving = false; }
-function standUp(){ if (!me || me.seat < 0) return; const s = seats[me.seat]; s.occ = false; me.seat = -1; me.sit = false; me.pos.set(s.x + Math.sin(s.rot) * .7, 0, s.z + Math.cos(s.rot) * .7); const [x, z] = resolve(me.pos.x, me.pos.z); me.pos.x = x; me.pos.z = z; pushPresence(true); refreshBar(); }
+function standUp(){ if (!me || me.seat < 0) return; const s = seats[me.seat]; s.occ = false; me.seat = -1; me.sit = false; me.pos.set(s.x + Math.sin(s.rot) * .7, 0, s.z + Math.cos(s.rot) * .7); ctrl.route = []; const [x, z] = resolve(me.pos.x, me.pos.z); me.pos.x = x; me.pos.z = z; pushPresence(true); refreshBar(); }
 function sitAt(i){ const s = seats[i]; if (s.occ || s.occRemote) return; placeSeated(me, i); s.occ = true; pushPresence(true); refreshBar(); }
 
 /* ---------- rides: walking there, queueing, boarding, getting off ---------- */
@@ -111,10 +118,10 @@ function goToRide(id){
   if (myRide.id === id){ toast(myRide.queued ? `${ride.name} 줄에 서 있어요` : `${ride.name} 타는 중이에요`); return; }
   if (myRide.id >= 0 && !myRide.queued){ toast('지금 타는 놀이기구가 끝나면 갈 수 있어요'); return; }
   leaveQueue(); standUp(); setRideMenuOpen(false);
-  ctrl.goRide = id; ctrl.target = ride.entrance.clone(); ctrl.pendingSeat = -1; ctrl.stuck = 0; ctrl.stuckT = 0;
+  ctrl.pendingSeat = -1; walkTo(ride.entrance); ctrl.goRide = id;
   toast(`${ride.emoji} ${ride.name}(으)로 가는 중`);
 }
-function joinQueue(id){ const ride = rideById(id); myRide.id = id; myRide.seat = -1; myRide.queued = true; myRide.at = nowS(); ctrl.goRide = -1; ctrl.target = null;
+function joinQueue(id){ const ride = rideById(id); myRide.id = id; myRide.seat = -1; myRide.queued = true; myRide.at = nowS(); ctrl.goRide = -1; ctrl.target = null; ctrl.route = [];
   me.rot = Math.atan2(ride.board.x - me.pos.x, ride.board.z - me.pos.z); pushPresence(true); refreshBar();
   const w = ride.wait(nowS()); if (w > 1.5) toast(`${ride.name} 줄 서기 · ${Math.ceil(w)}초 뒤 탑승`); }
 function leaveQueue(){ if (myRide.id >= 0 && myRide.queued){ myRide.id = -1; myRide.queued = false; pushPresence(true); refreshBar(); } }
@@ -125,7 +132,7 @@ function tryBoard(t){
   // pick at random among the free seats (two people boarding at once rarely collide), front rows a bit more likely
   const seat = open[Math.floor(Math.pow(Math.random(), 1.4) * open.length)];
   myRide.seat = seat; myRide.rec = ride.rec(t, seat); myRide.queued = false; myRide.at = t;
-  me.sit = true; me.moving = false; ctrl.target = null;
+  me.sit = true; me.moving = false; ctrl.target = null; ctrl.route = [];
   cam.yaw = 0; cam.pitch = 0;
   if (ride.pov && cam.povPref) setCamMode('pov'); else { cam.dist = Math.max(cam.dist, ride.camDist); }
   chime(); toast(`${ride.emoji} ${ride.name} 탑승! ${ride.kind === 'wheel' ? '한 바퀴 돌고 내려요' : '곧 출발해요'}`);
@@ -133,7 +140,7 @@ function tryBoard(t){
 }
 function getOff(ride, fun){
   me.rideP = null; me.rideQ = null; me.sit = false; me.handsUp = false;
-  const p = ride.exit; me.pos.set(p.x + rand(-.6, .6), 0, p.z + rand(-.4, .4)); const [x, z] = resolve(me.pos.x, me.pos.z); me.pos.x = x; me.pos.z = z;
+  const p = ride.exit, j = p.y > .1 ? .25 : .6; me.pos.set(p.x + rand(-j, j), 0, p.z + rand(-j * .6, j * .6)); const [x, z] = resolve(me.pos.x, me.pos.z); me.pos.x = x; me.pos.z = z; me.pos.y = groundH(x, z);
   me.rot = Math.atan2(PLAZA.x - x, PLAZA.z - z); me.g.rotation.set(0, me.rot, 0);
   myRide.id = -1; myRide.seat = -1; myRide.queued = false;
   if (cam.mode === 'pov') setCamMode('follow');

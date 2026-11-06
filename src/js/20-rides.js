@@ -111,13 +111,18 @@ const viking = (() => {
   rows.forEach(x => { const lift = Math.max(0, Math.abs(x) - 2.6) * .35, y = .26 + lift;
     box(.5, .45 + lift, 4.0, mat.woodDark, boat, x, .2, 0); box(.08, .5, 4.0, mat.yellow, boat, x + (x < 0 ? -.25 : .25), .65 + lift, 0);
     for (const z of [-1.35, 0, 1.35]) seats.push(seatMarker(boat, x, y + .45, z, x < 0 ? Math.PI / 2 : -Math.PI / 2)); });
-  // boarding platform + stairs (south side)
-  box(8.4, .3, 1.8, mat.concrete, root, 0, 2.9, 3.4); box(8.4, 1.0, .08, mat.white, root, 0, 3.2, 4.3, false);
-  for (let i = 0; i < 8; i++) box(2.0, .36, .5, mat.concrete, root, 0, i * .36, 7.4 - i * .5);
-  for (const sx of [-3.9, 3.9]) cyl(.18, .18, 2.9, mat.steel, root, sx, 0, 3.4, 8);
-  obR(cx - 7.6, cx + 7.6, cz - 2.8, cz + 4.5); obR(cx - 1.1, cx + 1.1, cz + 4.4, cz + 7.6);
+  // boarding platform (top 3.0 m) + walkable stairs on the south side
+  box(8.4, .3, 1.6, mat.concrete, root, 0, 2.7, 3.2);
+  for (const [x0, x1] of [[-4.2, -1.05], [1.05, 4.2]]) box(x1 - x0, .9, .06, mat.white, root, (x0 + x1) / 2, 3.0, 3.97, false);
+  for (const sx of [-3.9, 3.9]) cyl(.18, .18, 2.7, mat.steel, root, sx, 0, 3.2, 8);
+  for (let k = 0; k < 10; k++) box(2.0, .3 * (k + 1), .4, mat.concrete, root, 0, 0, 8.0 - .4 * k - .2);
+  for (const sx of [-1.02, 1.02]) beam(V(sx, 1.0, 8.0), V(sx, 3.9, 4.0), .04, mat.steel, root, 5, false);
+  surf(cx - 4.2, cx + 4.2, cz + 2.4, cz + 4.0, 3.0);
+  surf(cx - 1.0, cx + 1.0, cz + 4.0, cz + 8.0, (x, z) => clamp((cz + 8.0 - z) / 4.0, 0, 1) * 3.0);
+  AREAS.push({ x0: cx - 4.2, x1: cx + 4.2, z0: cz + 2.4, z1: cz + 8.0, top: V(cx, 3.0, cz + 3.6), bottom: V(cx, 0, cz + 8.6) });
+  obR(cx - 7.6, cx + 7.6, cz - 2.8, cz + 2.35);
   const r = cycleRide(Object.assign(R, { id: 'viking', name: '바이킹', emoji: '🏴‍☠️', desc: '하늘 끝까지 흔들리는 배', root, seats,
-    entrance: V(cx + 2.4, 0, cz + 8.2), exit: V(cx - 2.6, 0, cz + 8.4), board: V(cx, 3.2, cz + 3.3), camDist: 16, pov: true, density: .5 }));
+    entrance: V(cx - 1.6, 3.0, cz + 3.3), exit: V(cx + 2.6, 3.0, cz + 3.3), board: V(cx, 3.2, cz + 1.0), camDist: 16, pov: true, density: .5 }));
   const AMAX = 1.25, T = 6.4;
   const angleAt = t => { const s = cycleAt(r, t); if (s.load) return 0; const u = s.u, env = smooth01(u / 15) * smooth01((r.run - 1.5 - u) / 11); return AMAX * env * Math.sin(TAU * u / T); };
   r.speedAt = t => Math.abs(angleAt(t + .05) - angleAt(t - .05)) / .1 * ARM;
@@ -270,14 +275,18 @@ const coaster = (() => {
   // station
   { const st = grp(root, -1, 0, -30);
     box(21, 1.35, 2.6, mat.concrete, st, -.5, 0, 2.7); box(21, .08, .08, mat.yellow, st, -.5, 1.36, 1.45, false);
-    for (let i = 0; i < 5; i++) box(2.2, .27 * (i + 1), .45, mat.concrete, st, 1, 0, 4.25 + (4 - i) * .45);
-    for (const x of [-10, -4, 2, 8]) for (const z of [-2.4, 3.8]) cyl(.14, .14, 4.8, mat.navy, st, x, 0, z, 8);
+    // walkable stairs up to the platform (top 1.35 m), between the roof posts
+    for (let k = 0; k < 5; k++) box(2.2, .27 * (k + 1), .49, mat.concrete, st, 4, 0, 6.4 - .49 * k - .245);
+    for (const x of [-10, -4, 2, 8]) for (const z of [-2.4, 3.8]){ cyl(.14, .14, 4.8, mat.navy, st, x, 0, z, 8); obC(x - 1, z - 30, .3); }
     const roof = box(22, .3, 7.2, mat.red, st, -.5, 4.8, .7); roof.castShadow = true;
     const sign = textTex([['롤러코스터', 130, '#fff6d8', .52]], { bg: '#2f4a8a', border: '#f2c443', w: 1024, h: 256, r: 60 });
     const sm = new THREE.MeshStandardMaterial({ map: sign, emissive: C('#ffffff'), emissiveMap: sign, emissiveIntensity: .2 }); glow.push({ mat: sm, base: .2, night: .9 });
     const s1 = mesh(new THREE.PlaneGeometry(6, 1.5), sm, st, 1, 5.9, 4.32); signMeshes.push(s1);
     box(6.2, 1.6, .1, mat.navy, st, 1, 5.1, 4.26);
-    obR(-12.5, 10.5, -32.8, -26.2); }
+    surf(-12, 9, -28.65, -26.05, 1.35);
+    surf(1.9, 4.1, -26.05, -23.6, (x, z) => clamp((-23.6 - z) / 2.45, 0, 1) * 1.35);
+    AREAS.push({ x0: -12, x1: 9, z0: -28.65, z1: -23.6, top: V(3, 1.35, -26.4), bottom: V(3, 0, -23.1) });
+    obR(-12.5, 10.5, -32.8, -28.7); }
   // train: 4 cars × 4 seats
   const CARS = 4, GAP = 2.55, cars = [], seats = [];
   const carCols = ['#d9473f', '#f2c443', '#d9473f', '#f2c443'];
@@ -293,7 +302,7 @@ const coaster = (() => {
   }
   const R = { load: 14, run: RUN, offset: 0 };
   const r = cycleRide(Object.assign(R, { id: 'coaster', name: '롤러코스터', emoji: '🎢', desc: `길이 ${Math.round(LEN)}m · 최고 ${Math.round(P[crest].y)}m 높이`, root, seats,
-    entrance: V(1, 0, -23.0), exit: V(5.8, 0, -23.2), board: V(1, 1.4, -27.8), camDist: 12, pov: true, density: .5 }));
+    entrance: V(1.2, 1.35, -27.4), exit: V(6.2, 1.35, -27.4), board: V(1.2, 1.4, -29.5), camDist: 12, pov: true, density: .5 }));
   // where the front car is (distance along the track from the station stop) at time t
   const frontAt = t => { const s = cycleAt(r, t); if (s.load) return 0; const u = Math.min(s.u, tim[N]); let lo = 0, hi = N; while (hi - lo > 1){ const m = (lo + hi) >> 1; if (tim[m] <= u) lo = m; else hi = m; } const k = (u - tim[lo]) / Math.max(1e-4, tim[hi] - tim[lo]); return (lo + k) * ds; };
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), tmpX = V(0, 0, 0), tmpU = V(0, 0, 0), tmpT = V(0, 0, 0), tmpP = V(0, 0, 0), one = V(1, 1, 1);

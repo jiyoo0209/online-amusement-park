@@ -142,7 +142,7 @@ function enter(){
   if (entered) return;
   myName = ($('#nick').value.replace(/\s+/g, ' ').trim() || myName).slice(0, 10); store.set('park-name', myName); store.set('park-seed', String(mySeed));
   me = makeAvatar(mySeed); scene.add(me.g); setLabel(me, myName, me.L.hair);
-  me.pos.set(rand(-1.5, 1.5), 0, 30.5); me.rot = Math.PI; me.g.rotation.y = Math.PI; ctrl.target = V(me.pos.x * .5, 0, 25);
+  me.pos.set(rand(-1.5, 1.5), 0, 30.5); me.rot = Math.PI; me.g.rotation.y = Math.PI; walkTo(V(me.pos.x * .5, 0, 25));
   entered = true; $('#entry').hidden = true; $('#hud').hidden = false; $('#tags').hidden = false;
   cam.mode = 'follow'; cam.theta = 0; cam.phi = .36; cam.dist = 13;
   initAudio(); if (AC && AC.state === 'suspended') AC.resume();
@@ -175,22 +175,25 @@ function moveMe(dt, now, ts){
   const jm = Math.hypot(joy.vx, joy.vy);
   if (joy.id !== null && jm > .15){ kx += joy.vx; kz -= joy.vy; spMul = Math.min(1, .35 + jm * .75); }
   let dir = null, fast = keys['shift'] ? 1.6 : 1;
-  if ((kx || kz) && cam.mode === 'follow'){ standUp(); ctrl.target = null; ctrl.pendingSeat = -1; ctrl.goRide = -1; fwd.set(-Math.sin(cam.theta), 0, -Math.cos(cam.theta)); right.set(-fwd.z, 0, fwd.x); dir = fwd.multiplyScalar(kz).add(right.multiplyScalar(kx)).normalize(); }
+  if ((kx || kz) && cam.mode === 'follow'){ standUp(); ctrl.target = null; ctrl.route = []; ctrl.pendingSeat = -1; ctrl.goRide = -1; fwd.set(-Math.sin(cam.theta), 0, -Math.cos(cam.theta)); right.set(-fwd.z, 0, fwd.x); dir = fwd.multiplyScalar(kz).add(right.multiplyScalar(kx)).normalize(); }
   else if (ctrl.target){ tmpV.subVectors(ctrl.target, me.pos); tmpV.y = 0; const d = tmpV.length();
-    if (d < .15){ ctrl.target = null; if (ctrl.pendingSeat >= 0){ sitAt(ctrl.pendingSeat); ctrl.pendingSeat = -1; } if (ctrl.goRide >= 0) joinQueue(ctrl.goRide); }
+    if (d < .15){ if (ctrl.route.length){ ctrl.target = ctrl.route.shift(); } else { ctrl.target = null; if (ctrl.pendingSeat >= 0){ sitAt(ctrl.pendingSeat); ctrl.pendingSeat = -1; } if (ctrl.goRide >= 0) joinQueue(ctrl.goRide); } }
     else { dir = tmpV.normalize(); if (ctrl.goRide >= 0 && d > 8) fast = 1.5; } }
   if (dir && me.seat < 0){
     const sp = 3.2 * dt * spMul * fast, ox = me.pos.x, oz = me.pos.z;
-    const [nx, nz] = resolve(me.pos.x + dir.x * sp, me.pos.z + dir.z * sp);
+    let [nx, nz] = resolve(me.pos.x + dir.x * sp, me.pos.z + dir.z * sp);
+    // raised platforms: you can step up/down stairs, but not climb or drop off a platform edge
+    const oh = groundH(ox, oz), ok = (x, z) => Math.abs(groundH(x, z) - oh) <= .45;
+    if (!ok(nx, nz)){ if (ok(nx, oz)) nz = oz; else if (ok(ox, nz)) nx = ox; else { nx = ox; nz = oz; } }
     if ((nx - ox) * dir.x + (nz - oz) * dir.z >= 0){ me.pos.x = nx; me.pos.z = nz; }
-    me.pos.y = 0; me.rot = Math.atan2(dir.x, dir.z);
+    me.pos.y = groundH(me.pos.x, me.pos.z); me.rot = Math.atan2(dir.x, dir.z);
     const real = Math.hypot(me.pos.x - ox, me.pos.z - oz);
     if (real < sp * .25){ ctrl.stuck += dt;
       if (ctrl.stuck > .5 && ctrl.target){
         if (ctrl.pendingSeat >= 0 && Math.hypot(ctrl.target.x - me.pos.x, ctrl.target.z - me.pos.z) < 1.4){ sitAt(ctrl.pendingSeat); ctrl.target = null; ctrl.pendingSeat = -1; }
         else if (ctrl.goRide >= 0){ // walked into something on the way: hop to the entrance
-          const e = rideById(ctrl.goRide).entrance; me.pos.set(e.x, 0, e.z); ripple(me.pos); ctrl.target = null; joinQueue(ctrl.goRide); }
-        else { ctrl.target = null; ctrl.pendingSeat = -1; }
+          const e = rideById(ctrl.goRide).entrance; me.pos.set(e.x, e.y, e.z); ripple(me.pos); ctrl.target = null; joinQueue(ctrl.goRide); }
+        else { ctrl.target = null; ctrl.route = []; ctrl.pendingSeat = -1; }
         ctrl.stuck = 0; } }
     else ctrl.stuck = 0;
     me.moving = true; pushPresence();
@@ -220,7 +223,7 @@ function frame(){
     else { a.rideP = null; a.sit = r.seat >= 0; a.handsUp = false; const d = a.pos.distanceTo(r.tgt); if (d > 6) a.pos.copy(r.tgt); else if (d > 1e-3) a.pos.lerp(r.tgt, Math.min(1, (3.8 * dt) / d)); a.rot = r.rot; a.moving = !a.sit && (r.moving || d > .05); }
     poseAvatar(a, dt, t); a.g.visible = !r.first;
   }
-  updateNpcRiders(ts, dt, t); updateWalkers(ts, dt, t);
+  updateVendor(dt, t);
 
   // world motion
   fountain.tick(t); bunting.tick(t);
@@ -270,7 +273,7 @@ function frame(){
   if (entered){
     if (me) placeTag(me, me.g, 1.5 * me.L.size, me.g.visible, now);
     for (const r of remotes.values()) placeTag(r.a, r.a.g, 1.5 * r.a.L.size, r.a.g.visible, now);
-    for (const w of walkers) placeTag(w.a, w.a.g, 1.5 * w.a.L.size, true, now);
+    placeTag(vendor.a, vendor.a.g, 1.5 * vendor.a.L.size, true, now);
   }
   renderer.render(scene, camera);
   if (!entered && pv.r && pv.a){ pv.a.g.rotation.y = Math.sin(t * .6) * .7; pv.a.rot = pv.a.g.rotation.y; poseAvatar(pv.a, dt, t); pv.a.g.position.set(0, 0, 0); pv.r.render(pv.scene, pv.cam); }
@@ -281,7 +284,7 @@ addEventListener('resize', fitView); addEventListener('orientationchange', () =>
 if (window.visualViewport) visualViewport.addEventListener('resize', fitView);
 
 // debug hooks for automated checks (harmless in production)
-window.__park = { skew(s){ clockSkew += s * 1000; }, cycleAt, rides, get me(){ return me; }, myRide, remotes, goToRide, enter, nowS, cam, setCamMode, toast, get room(){ return room; } };
+window.__park = { skew(s){ clockSkew += s * 1000; }, cycleAt, walkTo: p => walkTo(new THREE.Vector3(p[0], p[1], p[2])), groundH, rides, get me(){ return me; }, myRide, remotes, goToRide, enter, nowS, cam, setCamMode, toast, get room(){ return room; } };
 
 let started = false;
 const startNow = () => { if (started) return; started = true; redrawFontTex(); tickClock(); applyEnv(envTo); envT = 1; frame(); };

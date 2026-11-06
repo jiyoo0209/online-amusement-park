@@ -79,3 +79,10 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // redraw canvas textures that use web fonts once the fonts have arrived
 const fontTex = [];
 function redrawFontTex(){ fontTex.forEach(t => { const cv = t.image, g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); t.userData.draw(g, cv.width, cv.height); t.needsUpdate = true; }); }
+
+// walkable raised floors (ride platforms and their stairs). Ground is height 0.
+const SURF = [];   // {x0, x1, z0, z1, h(x, z)}
+const AREAS = [];  // raised areas you can only reach by their stairs: {x0, x1, z0, z1, top, bottom}
+function surf(x0, x1, z0, z1, h){ SURF.push({ x0, x1, z0, z1, h: typeof h === 'number' ? () => h : h }); }
+function groundH(x, z){ let h = 0; for (const s of SURF) if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1) h = Math.max(h, s.h(x, z)); return h; }
+function areaAt(x, z){ return AREAS.find(a => x >= a.x0 && x <= a.x1 && z >= a.z0 && z <= a.z1) || null; }
