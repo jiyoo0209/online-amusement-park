@@ -1,0 +1,14 @@
+{
+  "name": "online-amusement-park",
+  "version": "1.0.0",
+  "private": true,
+  "description": "온라인 놀이공원 - 웹 3D 멀티플레이 놀이공원",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs && node serve.mjs"
+  },
+  "dependencies": {
+    "three": "0.128.0",
+    "@supabase/supabase-js": "2.45.4"
+  }
+}
