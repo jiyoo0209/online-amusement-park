@@ -133,7 +133,7 @@ try {
 } catch (e) { pv.r = null; }
 function hairText(L){ const BN = { pants: '긴바지', short: '반바지', skirt: '플리츠 치마' }, TN = { tshirt: '티셔츠', tank: '나시' };
   const wear = L.dress ? `${DRESS_COLORS[L.outfitC][0]} 드레스` : `${TOP_COLORS[L.topC][0]} ${TN[L.top]} · ${BOTTOM_COLORS[L.botC][0]} ${BN[L.bottom]}`;
-  return `${HAIR_NAMES[L.style]} · ${HAIR_COLORS[L.hairIdx][0]} 머리 · ${wear}`; }
+  return `${HAIR_NAMES[L.style]} · ${HAIR_COLORS[L.hairIdx][0]} 머리 · ${EYE_COLORS[L.eye][1]} 눈 · ${wear}`; }
 function showPreview(){ if (pv.a) pv.scene.remove(pv.a.g); pv.a = makeAvatar(mySeed); pv.scene.add(pv.a.g); $('#lookDesc').textContent = hairText(pv.a.L); }
 showPreview();
 $('#reroll').onclick = () => { mySeed = newSeed(); showPreview(); };

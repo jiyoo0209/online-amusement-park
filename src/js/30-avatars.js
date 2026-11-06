@@ -1,4 +1,4 @@
-/* ---------- avatars: seeded chibi characters with outfits (same system as the cafe, chars/*.glb) ---------- */
+/* ---------- avatars: seeded chibi characters with outfits and eye colours (same system as the cafe, chars/*) ---------- */
 function rng(seed){ let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const LOOK = {
   skin: ['#f8dfca', '#f2d0b4', '#e9bd96', '#d6a37a', '#b07c55', '#85593b'],
@@ -21,7 +21,7 @@ function lookFrom(seed){
   L.dress = !L.male && r() < .4; L.outfitC = (r() * DRESS_COLORS.length) | 0;
   L.top = r() < .55 ? 'tshirt' : 'tank'; L.bottom = L.male ? (r() < .55 ? 'pants' : 'short') : (r() < .55 ? 'skirt' : 'short');
   L.topC = (r() * TOP_COLORS.length) | 0; L.botC = (r() * BOTTOM_COLORS.length) | 0; L.shoeC = (r() * SHOE_COLORS.length) | 0;
-  L.outfit = L.dress ? 0 : OUTFIT_KEY[L.top]; L.hairIdx = ((seed >>> 3) & 15) % HAIR_COLORS.length; L.hair = HAIR_COLORS[L.hairIdx][1]; L.size = .96 + r() * .08;
+  L.outfit = L.dress ? 0 : OUTFIT_KEY[L.top]; L.eye = (r() * EYE_COLORS.length) | 0; L.hairIdx = ((seed >>> 3) & 15) % HAIR_COLORS.length; L.hair = HAIR_COLORS[L.hairIdx][1]; L.size = .96 + r() * .08;
   return L;
 }
 const HIP = .44;
@@ -39,6 +39,8 @@ const BOTTOM_COLORS = [['데님', '#3f5570'], ['연청', '#7f9bb5'], ['베이지
 const SHOE_COLORS = ['#4a3b33', '#f4efe6', '#2a2a2a', '#c96f5a', '#7d9fd6', '#d9b45a'];
 const DRESS_COLORS = [['더스티 핑크', '#c9a6bb', '#b98aa4'], ['라벤더', '#b3a2db', '#8f7cc0'], ['민트', '#a7d6c3', '#6fae98'], ['하늘', '#a9c6ee', '#7d9fd6'],
   ['레몬', '#f2dc8e', '#d9b45a'], ['피치', '#f3b39c', '#d98a72'], ['아이보리', '#f4efe6', '#c9b7a6'], ['네이비', '#3f5570', '#2b3a52']];
+// eye colours: the same face drawing with the iris recoloured (chars/eyes/<key>.png)
+const EYE_COLORS = [['blue', '블루'], ['brown', '브라운'], ['green', '그린'], ['amber', '앰버'], ['violet', '바이올렛'], ['pink', '핑크'], ['gray', '그레이'], ['teal', '틸']];
 const CHIBI_S = .83;     // model units → metres (about the height of the old avatar)
 const CB = (() => {
   const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -77,20 +79,40 @@ const CB = (() => {
       const keep = []; for (let t = 0; t < idx.length; t += 3){ let ok = true; for (let q = 0; q < 3; q++){ p.fromBufferAttribute(P, idx[t + q]); if (!test(p)) ok = false; } if (ok) keep.push(idx[t], idx[t + 1], idx[t + 2]); }
       const s = new THREE.BufferGeometry(); s.setAttribute('position', new THREE.BufferAttribute(pos, 3)); s.setAttribute('normal', N); s.setAttribute('skinIndex', g.attributes.skinIndex); s.setAttribute('skinWeight', g.attributes.skinWeight); s.setIndex(keep); return s; };
     G.socks = shell(p => p.y < .2, .009); G.shoes = shell(p => p.y < .095, .024); G.under = shell(p => p.y > .58 && p.y < .8 && Math.abs(p.x) < .21, .008);
+    // under-layers in the top's colour: no skin between top and bottom, and no bare shoulders under the tank
+    const ax = p => Math.abs(p.x);
+    G.under_tshirt = shell(p => p.y > .46 && p.y < .87 && ax(p) < .2 && !(p.y > .8 && ax(p) < .085 && p.z > 0) && !(p.y > .835 && ax(p) < .075), .008);
+    // briefs under skirts and the dress, in the same colour: hips and the top of the thighs, cut high on the legs
+    G.briefs = shell(p => p.y < .6 && (p.y > .47 || (p.y > .395 && ax(p) < .055 + (p.y - .395) * 1.4)) && !(ax(p) > .12 && p.y > .67), .006);
+    G.under_tank = shell(p => p.y > .46 && p.y < .83 && ax(p) < .175 && !(p.y > .8 && ax(p) < .075 && p.z > 0), .008);
+    // tank straps: a ribbon traced over each shoulder (rays from inside the torso, first surface hit), from the front neckline to the back
+    { const bm = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })), rc = new THREE.Raycaster(), sp = [], si = [], SX = .112, W = .022, OFF = .011, NS = 24;
+      for (const sg of [-1, 1]){ const c = new THREE.Vector3(sg * SX, .76, 0), rows = [];
+        for (let k = 0; k <= NS; k++){ const th = -.15 + (Math.PI + .3) * k / NS, d = new THREE.Vector3(0, Math.sin(th), Math.cos(th)).normalize();
+          rc.set(c, d); const h = rc.intersectObject(bm)[0]; if (!h) continue; const nr = h.face.normal.clone(); if (nr.dot(d) < 0) nr.negate(); rows.push(h.point.clone().addScaledVector(nr, OFF)); }
+        for (let it = 0; it < 3; it++) for (let k = 1; k < rows.length - 1; k++) rows[k].lerp(rows[k - 1].clone().add(rows[k + 1]).multiplyScalar(.5), .5);
+        const base = sp.length / 3; rows.forEach(r => sp.push(r.x - W, r.y, r.z, r.x + W, r.y, r.z));
+        for (let k = 0; k < rows.length - 1; k++){ const a = base + k * 2; si.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
+      const st = new THREE.BufferGeometry(); st.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); st.setIndex(si); st.computeVertexNormals(); skin(st); G.straps_tank = st; }
     // long pants (boys): the hips and legs pushed out, a little wider towards the hem
     { const pos = new Float32Array(P.count * 3); for (let i = 0; i < P.count; i++){ const y = P.getY(i), d = .02 + (y < .3 ? .018 * (.3 - y) / .2 : 0) + (y > .5 ? .004 : 0); pos[i * 3] = P.getX(i) + N.getX(i) * d; pos[i * 3 + 1] = y + N.getY(i) * d; pos[i * 3 + 2] = P.getZ(i) + N.getZ(i) * d; }
       const keep = []; for (let t = 0; t < idx.length; t += 3){ let ok = true; for (let q = 0; q < 3; q++){ const y = P.getY(idx[t + q]); if (!(y > .085 && y < .625)) ok = false; } if (ok) keep.push(idx[t], idx[t + 1], idx[t + 2]); }
       const s = new THREE.BufferGeometry(); s.setAttribute('position', new THREE.BufferAttribute(pos, 3)); s.setAttribute('normal', N); s.setAttribute('skinIndex', g.attributes.skinIndex); s.setAttribute('skinWeight', g.attributes.skinWeight); s.setIndex(keep); G.outfit_pants = s; } }
-  function loadMaleHair(done){ let left = MALE_HAIRS.length; const fin = () => { if (--left === 0) done(); };
-    MALE_HAIRS.forEach(k => { const url = 'chars/hair_' + k + '.glb', ok = gl => { let m; gl.scene.traverse(x => { if (x.isMesh && !m) m = x; }); m.geometry.computeVertexNormals(); G['hair_' + k] = m.geometry; fin(); };
+  function loadMaleHair(done){ let left = MALE_HAIRS.length + 1; const fin = () => { if (--left === 0) done(); };
+    [...MALE_HAIRS, 'scalp_braid'].forEach(k => { const url = 'chars/' + (k.startsWith('scalp') ? k : 'hair_' + k) + '.glb', ok = gl => { let m; gl.scene.traverse(x => { if (x.isMesh && !m) m = x; }); m.geometry.computeVertexNormals(); G[k.startsWith('scalp') ? k : 'hair_' + k] = m.geometry; fin(); };
       if (!THREE.GLTFLoader) return fin(); const ld = new THREE.GLTFLoader(); ld.load(url, ok, undefined, () => {
         fetch(url + '.txt').then(r => r.ok ? r.text() : Promise.reject()).then(b64 => { const bin = Uint8Array.from(atob(b64.trim()), c => c.charCodeAt(0)); ld.parse(bin.buffer, 'chars/', ok, fin); }).catch(fin); }); }); }
-  function loadOutfits(done){ let left = OUTFITS.length; const fin = () => { if (--left === 0) done(); };
-    OUTFITS.forEach(o => { const url = 'chars/outfits/' + o.key + '.glb', ok = gl => { let m; gl.scene.traverse(x => { if (x.isMesh && !m) m = x; }); const g = m.geometry; g.computeVertexNormals(); skin(g);
-        // skirt below the waist follows the hips and, lower down, partly the thigh on its side
+  // skirts and the dress also have a seated shape (<key>_sit.glb, same vertices) that only follows the hips
+  const SITTERS = ['dress', 'skirt'];
+  function loadOutfits(done){ const jobs = OUTFITS.map(o => o.key).concat(SITTERS.map(k => k + '_sit'), SITTERS.map(k => k + '_crouch'), SITTERS.map(k => k + '_lounge')); let left = jobs.length; const fin = () => { if (--left === 0) done(); };
+    jobs.forEach(key => { const url = 'chars/outfits/' + key + '.glb', sit = /_(sit|crouch|lounge)$/.test(key), base = key.replace(/_(sit|crouch|lounge)$/, ''), ok = gl => { let m; gl.scene.traverse(x => { if (x.isMesh && !m) m = x; }); const g = m.geometry; g.computeVertexNormals(); skin(g);
         const P = g.attributes.position, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, BI = n => names.indexOf(n);
-        if (o.key === 'dress' || o.key === 'skirt') for (let i = 0; i < P.count; i++) if (P.getY(i) < .63){ const t = Math.min(1, (.63 - P.getY(i)) / .43), w = .6 * Math.pow(t, 1.3); SI.setXYZW(i, BI('hips'), BI(P.getX(i) >= 0 ? 'thigh.L' : 'thigh.R'), 0, 0); SW.setXYZW(i, 1 - w, w, 0, 0); }
-        G['outfit_' + o.key] = g; fin(); };
+        if (sit) for (let i = 0; i < P.count; i++){ if (P.getY(i) < .6){ SI.setXYZW(i, BI('hips'), 0, 0, 0); SW.setXYZW(i, 1, 0, 0, 0); } }
+        // standing: below the waist the skirt follows the hips, and towards the hem the thigh on its side
+        else if (SITTERS.includes(base)) for (let i = 0; i < P.count; i++) if (P.getY(i) < .6){ const t = Math.min(1, (.6 - P.getY(i)) / (base === 'skirt' ? .1 : .15)), w = t * t * (3 - 2 * t); SI.setXYZW(i, BI('hips'), BI(P.getX(i) >= 0 ? 'thigh.L' : 'thigh.R'), 0, 0); SW.setXYZW(i, 1 - w, w, 0, 0); }
+        // tank: drop the original's thick shoulder pieces above the neckline (the straps come from the under-layer)
+        if (key === 'tank'){ const ix = g.index.array, keep = []; for (let t = 0; t < ix.length; t += 3) if (P.getY(ix[t]) < .83 && P.getY(ix[t + 1]) < .83 && P.getY(ix[t + 2]) < .83) keep.push(ix[t], ix[t + 1], ix[t + 2]); g.setIndex(keep); }
+        G['outfit_' + key] = g; fin(); };
       if (!THREE.GLTFLoader) return fin(); const ld = new THREE.GLTFLoader(); ld.load(url, ok, undefined, () => {
         fetch(url + '.txt').then(r => r.ok ? r.text() : Promise.reject()).then(b64 => { const bin = Uint8Array.from(atob(b64.trim()), c => c.charCodeAt(0)); ld.parse(bin.buffer, 'chars/', ok, fin); }).catch(fin); }); }); }
   // vertices at the same spot share one normal, so the body shades smoothly instead of showing facet lines
@@ -102,6 +124,14 @@ const CB = (() => {
     for (let i = 0; i < P.count; i++){ const v = acc.get(key(i)).clone().normalize(); N.setXYZ(i, v.x, v.y, v.z); } N.needsUpdate = true; }
   if (THREE.GLTFLoader){ const ld = new THREE.GLTFLoader(); ld.load('chars/chibi.glb', ready, undefined, () => {
     fetch('chars/chibi.glb.txt').then(r => r.ok ? r.text() : Promise.reject()).then(b64 => { const bin = Uint8Array.from(atob(b64.trim()), c => c.charCodeAt(0)); ld.parse(bin.buffer, 'chars/', ready, () => {}); }).catch(() => {}); }); }
+  // the braid's forehead layer ends in rounded curtain bangs: centre parting up, longer towards the temples (cut per pixel)
+  const bangMats = new Map(), bangsMat = hex => { if (bangMats.has(hex)) return bangMats.get(hex);
+    const m = new THREE.MeshStandardMaterial({ color: C(hex), roughness: .6, side: THREE.DoubleSide });
+    m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvP = position;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vP;').replace('void main() {', 'void main() { vec3 p = vP; float e = 1.27 + .10 * exp(-pow((p.x - .02) / .09, 2.)) - .03 * min(1., abs(p.x) / .22) - .1 * smoothstep(.19, .3, abs(p.x)); if (p.z > .02 && abs(p.x) < .4 && p.y < e) discard;'); };
+    m.customProgramCacheKey = () => 'bangsA'; bangMats.set(hex, m); return m; };
+  const eyeMats = new Map(), faceMatFor = i => { if (!i) return G.faceMat; if (eyeMats.has(i)) return eyeMats.get(i);
+    const m = G.faceMat.clone(), t = new THREE.TextureLoader().load('chars/eyes/' + EYE_COLORS[i][0] + '.png'); t.encoding = THREE.sRGBEncoding; t.flipY = false; t.anisotropy = 4; m.map = t; eyeMats.set(i, m); return m; };
   const matFor = (map, hex, o) => { if (!map.has(hex)) map.set(hex, new THREE.MeshStandardMaterial(Object.assign({ color: C(hex) }, o))); return map.get(hex); };
   // put the body, hair, scalp and face on an avatar (now, or as soon as chars/chibi.glb has loaded)
   const dress = a => {
@@ -111,14 +141,15 @@ const CB = (() => {
     body.add(B.hips); body.bind(new THREE.Skeleton(names.map(nm => B[nm]))); body.castShadow = true; body.receiveShadow = true; body.frustumCulled = false;
     const hm = matFor(hairMats, a.L.hair, { roughness: .6, side: THREE.DoubleSide }), key = HAIR_KEYS[a.L.style];
     const onHead = (geo, m, cast) => { const o = new THREE.Mesh(geo, m); o.position.copy(J.head).negate(); o.castShadow = cast; B.head.add(o); return o; };
-    if (G['hair_' + key]) onHead(G['hair_' + key], hm, true); if (!MALE_HAIRS.includes(key)) onHead(key === 'braid' ? G.scalpLo : G.scalp, hm, false); onHead(G.face, G.faceMat, false).renderOrder = 1;
+    if (G['hair_' + key]) onHead(G['hair_' + key], hm, true); if (!MALE_HAIRS.includes(key)) onHead(key === 'braid' && G.scalp_braid ? G.scalp_braid : key === 'braid' ? G.scalpLo : G.scalp, key === 'braid' && G.scalp_braid ? bangsMat(a.L.hair) : hm, false); onHead(G.face, faceMatFor(a.L.eye), false).renderOrder = 1;
     B['hand.L'].add(a.holder); a.holder.position.set(.05, .01, .045);
     a.g.add(body); a.B = B;
     // outfit
     const L = a.L, dc = DRESS_COLORS[L.outfitC], cloth = hex => matFor(clothMats, hex, { roughness: .9, side: THREE.DoubleSide, skinning: true });
-    const wear = (geo, m) => { if (!geo) return; const o = new THREE.SkinnedMesh(geo, m); o.bind(body.skeleton, body.bindMatrix); o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; a.g.add(o); };
-    if (L.dress){ const cm = cloth(dc[1]); wear(G.outfit_dress, cm); wear(G.under, cm); }
-    else { wear(G['outfit_' + L.top], cloth(TOP_COLORS[L.topC][1])); wear(G['outfit_' + L.bottom], cloth(BOTTOM_COLORS[L.botC][1])); }
+    const wear = (geo, m) => { if (!geo) return null; const o = new THREE.SkinnedMesh(geo, m); o.bind(body.skeleton, body.bindMatrix); o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; a.g.add(o); return o; };
+    const skirt = (key, m) => { const st = wear(G['outfit_' + key], m), si = wear(G['outfit_' + key + '_sit'], m), cr = wear(G['outfit_' + key + '_crouch'], m), lo = wear(G['outfit_' + key + '_lounge'], m); wear(G.briefs, m); if (st && si && cr && lo){ si.visible = cr.visible = lo.visible = false; a.sitSwap = [st, si, cr, lo]; } };
+    if (L.dress){ const cm = cloth(dc[1]); skirt('dress', cm); wear(G.under, cm); }
+    else { const tm = cloth(TOP_COLORS[L.topC][1]), bm = cloth(BOTTOM_COLORS[L.botC][1]); wear(G['outfit_' + L.top], tm); wear(G['under_' + L.top], tm); if (L.top === 'tank') wear(G.straps_tank, cloth(TOP_COLORS[L.topC][1])); if (L.bottom === 'skirt') skirt('skirt', bm); else wear(G['outfit_' + L.bottom], bm); }
     wear(G.socks, matFor(clothMats, '#fbf6f0', { roughness: .85, skinning: true })); wear(G.shoes, matFor(clothMats, L.dress ? dc[2] : SHOE_COLORS[L.shoeC], { roughness: .45, skinning: true }));
   };
   return { J, whenReady: f => { if (G) f(); else waiting.push(f); }, dress };
@@ -190,6 +221,8 @@ function poseAvatar(a, dt, t){
   const B = a.B; if (!B) return;
   const J = CB.J, R = (n, x = 0, y = 0, z = 0) => B[n].rotation.set(x, y, z);
   for (const k in B) B[k].rotation.set(0, 0, 0); B.hips.position.copy(J.hips);
+  // skirts and dresses switch to their seated shape (covers the knees) while sitting
+  if (a.sitSwap){ a.sitSwap[0].visible = !a.sit; a.sitSwap[1].visible = a.sit; a.sitSwap[2].visible = false; a.sitSwap[3].visible = false; }
   const ph = a.phase, s = Math.sin(ph), co = Math.cos(ph), br = Math.sin(t * 2 + a.phase * .3);
   let uaL = [0, 0, -1.22], uaR = [0, 0, 1.22], faL = [0, 0, 0], faR = [0, 0, 0];
   if (a.sit){
