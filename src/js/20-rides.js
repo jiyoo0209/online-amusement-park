@@ -1,23 +1,27 @@
 /* ---------- rides ----------
-   Every ride is a pure function of the shared clock (nowS), so all screens agree on where every seat is.
-   A ride exposes seat markers (Object3D) that riders sit on, plus boarding rules:
+   A ride only runs when someone is on it. The first person to sit down starts a countdown (load seconds); everyone who sits
+   down before it ends rides along. A run is named by its departure time T on the shared clock (nowS); every rider sends it
+   in their presence (rc), so all screens agree (updateRideSessions in 50-net.js). With nobody aboard the ride stays at rest.
+   Given the run, the motion is a pure function of the clock. A ride exposes seat markers (Object3D) that riders sit on, plus boarding rules:
      open(t)        → seat indices you can board right now ([] when closed)
-     rec(t, seat)   → a number saved with the boarding (cycle index or wheel pass)
+     rec(t, seat)   → the run you join by sitting down now (its departure time)
      done(rec, t)   → true once that ride is over
      wait(t)        → seconds until the next chance to board
      status(t)      → short Korean status text for the menu
 */
 const rides = [];
 const G = 9.8;
-function cycleAt(r, t){ const L = r.load + r.run, k = t + r.offset, c = Math.floor(k / L), u = k - c * L; return u < r.load ? { cyc: c, load: true, u, left: r.load - u } : { cyc: c, load: false, u: u - r.load, left: L - u }; }
+// where a ride is in its current run (r.sess = departure time, or null when nobody is aboard)
+function cycleAt(r, t){ const T = r.sess;
+  if (T == null || t >= T + r.run) return { cyc: -1, idle: true, load: true, u: 0, left: Infinity };
+  return t < T ? { cyc: T, load: true, u: r.load - (T - t), left: T - t } : { cyc: T, load: false, u: t - T, left: T + r.run - t }; }
 function cycleRide(r){
-  r.kind = 'cycle';
+  r.kind = 'cycle'; r.sess = null;
   r.open = t => { const s = cycleAt(r, t); return s.load && s.left > 1.2 ? r.seatIdx : []; };
-  r.rec = t => cycleAt(r, t).cyc;
-  r.done = (rec, t) => cycleAt(r, t).cyc !== rec;
+  r.rec = t => { const s = cycleAt(r, t); return s.idle ? Math.round((t + r.load) * 10) / 10 : s.cyc; };
+  r.done = (rec, t) => t >= rec + r.run;
   r.wait = t => { const s = cycleAt(r, t); return s.load ? 0 : s.left; };
-  r.status = t => { const s = cycleAt(r, t); return s.load ? (s.left > 1.2 ? `탑승 중 · ${Math.ceil(s.left)}초 뒤 출발` : '곧 출발해요') : `운행 중 · ${Math.ceil(s.left)}초 뒤 탑승`; };
-  r.npcKey = (seat, t) => cycleAt(r, t).cyc;
+  r.status = t => { const s = cycleAt(r, t); return s.idle ? '쉬는 중 · 타면 출발해요' : s.load ? (s.left > 1.2 ? `탑승 중 · ${Math.ceil(s.left)}초 뒤 출발` : '곧 출발해요') : `운행 중 · ${Math.ceil(s.left)}초 뒤 탑승`; };
   return r;
 }
 function seatMarker(parent, x, y, z, rotY = 0){ const o = new THREE.Object3D(); o.position.set(x, y, z); o.rotation.y = rotY; parent.add(o); return o; }
@@ -25,7 +29,7 @@ function addRide(r){ r.index = rides.length; r.seatIdx = r.seats.map((_, i) => i
 
 /* 1. 회전목마 — carousel */
 const carousel = (() => {
-  const cx = -20, cz = 6, R = { load: 12, run: 32, offset: 3 };
+  const cx = -20, cz = 6, R = { load: 12, run: 32 };
   const root = grp(scene, cx, 0, cz);
   cyl(7.6, 7.8, .3, mat.stone, root, 0, 0, 0, 40);
   const spin = grp(root, 0, .3, 0);
@@ -57,11 +61,11 @@ const carousel = (() => {
   const herd = buildCarouselHorses(spin, horses);
   obC(cx, cz, 8.1);
   const r = cycleRide(Object.assign(R, { id: 'carousel', name: '회전목마', emoji: '🎠', desc: '천천히 돌아가는 목마', root, seats,
-    entrance: V(cx + 9.0, 0, cz + 1.5), exit: V(cx + 9.2, 0, cz - 2.6), board: V(cx + 7.3, .55, cz + 1.2), camDist: 7, pov: true, povLevel: true, povUp: 1.3, povBack: 1.35, povPitch: .16, density: .45, camPhiMax: .16, camDistMax: 7.5 }));
-  const W = TAU / 9, ramp = 4;
-  const angleAt = t => { const s = cycleAt(r, t), per = W * (r.run - ramp); let a = s.cyc * per;
-    if (!s.load){ const u = s.u, d = r.run - u; if (u < ramp) a += W * u * u / (2 * ramp); else if (d < ramp) a += per - W * d * d / (2 * ramp); else a += W * ramp / 2 + W * (u - ramp); }
-    return a; };
+    entrance: V(cx + 9.0, 0, cz + 1.5), exit: V(cx + 9.2, 0, cz - 2.6), board: V(cx + 7.3, .55, cz + 1.2), camDist: 7, pov: true, povLevel: true, povUp: 1.05, povBack: 1.3, povPitch: .12, camPhiMax: .16, camDistMax: 7.5 }));
+  // three full turns a run, so the horses stop where they started
+  const ramp = 4, W = 3 * TAU / (r.run - ramp), per = W * (r.run - ramp);
+  const angleAt = t => { const s = cycleAt(r, t); if (s.load) return 0; const u = s.u, d = r.run - u;
+    return u < ramp ? W * u * u / (2 * ramp) : d < ramp ? per - W * d * d / (2 * ramp) : W * ramp / 2 + W * (u - ramp); };
   r.speedAt = t => { const s = cycleAt(r, t); if (s.load) return 0; const k = Math.min(1, s.u / ramp, (r.run - s.u) / ramp); return W * k * 5.4; };
   r.update = t => { const a = angleAt(t); spin.rotation.y = a % TAU; horses.forEach(h => { h.g.position.y = HY + .28 * Math.sin(a * 3 + h.ph); h.g.rotation.x = .06 * Math.cos(a * 3 + h.ph); }); herd.update(); flag.rotation.y = Math.sin(t * 2) * .3; };
   return addRide(r);
@@ -69,7 +73,7 @@ const carousel = (() => {
 
 /* 2. 바이킹 — pirate ship */
 const viking = (() => {
-  const cx = 24, cz = 4, PIV = 12.2, ARM = 8.6, R = { load: 12, run: 40, offset: 9 };
+  const cx = 24, cz = 4, PIV = 12.2, ARM = 8.6, R = { load: 12, run: 40 };
   const root = grp(scene, cx, 0, cz);
   const frame = M('#3f7fc9', { roughness: .45, metalness: .3 });
   for (const sz of [-4.6, 4.6]){ for (const sx of [-1, 1]) beam(V(sx * 7.2, 0, sz), V(0, PIV, sz * .55), .32, frame, root, 10); beam(V(-3.6, PIV / 2, sz * .78), V(3.6, PIV / 2, sz * .78), .18, frame, root, 8); }
@@ -112,7 +116,7 @@ const viking = (() => {
   AREAS.push({ x0: cx - 4.2, x1: cx + 4.2, z0: cz + 2.4, z1: cz + 8.0, top: V(cx, 3.0, cz + 3.6), bottom: V(cx, 0, cz + 8.6) });
   obR(cx - 7.6, cx + 7.6, cz - 2.8, cz + 2.35);
   const r = cycleRide(Object.assign(R, { id: 'viking', name: '바이킹', emoji: '🏴‍☠️', desc: '하늘 끝까지 흔들리는 배', root, seats,
-    entrance: V(cx - 1.6, 3.0, cz + 3.3), exit: V(cx + 2.6, 3.0, cz + 3.3), board: V(cx, 3.2, cz + 1.0), camDist: 16, pov: true, density: .5 }));
+    entrance: V(cx - 1.6, 3.0, cz + 3.3), exit: V(cx + 2.6, 3.0, cz + 3.3), board: V(cx, 3.2, cz + 1.0), camDist: 16, pov: true }));
   const AMAX = 1.25, T = 6.4;
   const angleAt = t => { const s = cycleAt(r, t); if (s.load) return 0; const u = s.u, env = smooth01(u / 15) * smooth01((r.run - 1.5 - u) / 11); return AMAX * env * Math.sin(TAU * u / T); };
   r.speedAt = t => Math.abs(angleAt(t + .05) - angleAt(t - .05)) / .1 * ARM;
@@ -120,9 +124,9 @@ const viking = (() => {
   return addRide(r);
 })();
 
-/* 3. 대관람차 — Ferris wheel (always turning; board a gondola as it reaches the bottom, ride one full turn) */
+/* 3. 대관람차 — Ferris wheel (pick a gondola while it waits, then it turns once and stops) */
 const wheel = (() => {
-  const cx = -28, cz = -24, HUB = 15.6, RAD = 12.4, N = 12, P = 72, WIN = 1.4 / 72;
+  const cx = -28, cz = -24, HUB = 15.6, RAD = 12.4, N = 12, P = 72, R = { load: 12, run: P };
   const root = grp(scene, cx, 0, cz);
   const frame = M('#f6f1e8', { roughness: .4, metalness: .2 });
   for (const sz of [-2.6, 2.6]) for (const sx of [-1, 1]){ beam(V(sx * 8.8, 0, sz * 1.15), V(0, HUB, sz * .62), .34, frame, root, 10); cyl(.7, .8, .4, mat.concrete, root, sx * 8.8, 0, sz * 1.15, 10); obC(cx + sx * 8.8, cz + sz * 1.15, .9); }
@@ -146,26 +150,22 @@ const wheel = (() => {
   // boarding deck
   box(5.6, .32, 4.2, mat.concrete, root, 0, 0, 0); box(1.8, .2, 1.8, mat.concrete, root, 0, 0, 2.9);
   obR(cx - 2.2, cx + 2.2, cz - 2.2, cz + 1.6);
-  const phi = (k, t) => { const v = t / P + k / N; return v - Math.floor(v); };
-  const r = addRide({ id: 'wheel', kind: 'wheel', name: '대관람차', emoji: '🎡', desc: '공원 전체가 한눈에 보이는 관람차', root, seats,
-    entrance: V(cx + 1.6, 0, cz + 5.6), exit: V(cx - 2.4, 0, cz + 5.4), board: V(cx, .4, cz + 2.4), camDist: 14, pov: false, density: .3, period: P });
-  const atBottom = t => { for (let k = 0; k < N; k++){ const f = phi(k, t); if (f < WIN * .6 || f > 1 - WIN) return k; } return -1; };
-  r.open = t => { const k = atBottom(t); return k < 0 ? [] : [k * 2, k * 2 + 1]; };
-  r.rec = (t, seat) => Math.round(t / P + (seat >> 1) / N);
-  r.done = (rec, t, seat) => t / P + (seat >> 1) / N - rec > 1 - WIN * .5;
-  r.wait = t => { let best = 1e9; for (let k = 0; k < N; k++){ const f = phi(k, t); best = Math.min(best, (1 - WIN - f + (f > 1 - WIN ? 1 : 0)) * P); } return atBottom(t) >= 0 ? 0 : best; };
-  r.status = t => atBottom(t) >= 0 ? '곤돌라 도착 · 지금 탈 수 있어요' : `다음 곤돌라 ${Math.ceil(r.wait(t))}초 뒤`;
-  r.waitSeat = (t, seat) => { const f = phi(seat >> 1, t); return f < WIN * .6 || f > 1 - WIN ? 0 : (1 - WIN - f) * P; };
-  r.npcKey = (seat, t) => Math.round(t / P + (seat >> 1) / N - .5 + WIN);
-  r.speedAt = () => RAD * TAU / P;
-  r.update = t => { spin.rotation.z = (t / P % 1) * TAU;
+  const r = cycleRide(Object.assign(R, { id: 'wheel', name: '대관람차', emoji: '🎡', desc: '공원 전체가 한눈에 보이는 관람차', root, seats, gondolas: true,
+    entrance: V(cx + 1.6, 0, cz + 5.6), exit: V(cx - 2.4, 0, cz + 5.4), board: V(cx, .4, cz + 2.4), camDist: 14, pov: false }));
+  // one full turn a run (with a gentle start and stop), so gondola 1 is always back at the bottom when it rests
+  const ramp = 4, W = 1 / (P - ramp);
+  r.turnAt = t => { const s = cycleAt(r, t); if (s.load) return 0; const u = s.u, d = P - u;
+    return u < ramp ? W * u * u / (2 * ramp) : d < ramp ? 1 - W * d * d / (2 * ramp) : W * ramp / 2 + W * (u - ramp); };
+  const phi = (k, t) => { const v = r.turnAt(t) + k / N; return v - Math.floor(v); };
+  r.speedAt = t => { const s = cycleAt(r, t); if (s.load) return 0; return RAD * TAU * W * Math.min(1, s.u / ramp, (P - s.u) / ramp); };
+  r.update = t => { spin.rotation.z = r.turnAt(t) * TAU;
     cabins.forEach((c, k) => { const a = -Math.PI / 2 + phi(k, t) * TAU; c.g.position.set(Math.cos(a) * RAD, HUB + Math.sin(a) * RAD, 0); c.body.rotation.z = Math.sin(t * .9 + k) * .035; }); };
-  return r;
+  return addRide(r);
 })();
 
 /* 4. 자이로드롭 — drop tower */
 const drop = (() => {
-  const cx = 26, cz = -22, TOP = 37.5, LOW = .65, R = { load: 10, run: 30, offset: 17 };
+  const cx = 26, cz = -22, TOP = 37.5, LOW = .65, R = { load: 10, run: 30 };
   const root = grp(scene, cx, 0, cz);
   const towerTex = canvasTex(64, 512, (g, w, h) => { for (let i = 0; i < 11; i++){ g.fillStyle = i % 2 ? '#f6f1e8' : '#3f7fc9'; g.fillRect(0, i * h / 11, w, h / 11 + 1); } g.fillStyle = 'rgba(0,0,0,.12)'; for (let i = 0; i < 4; i++) g.fillRect(i * 16 + 6, 0, 3, h); });
   cyl(3.0, 3.3, .6, mat.concrete, root, 0, 0, 0, 24); cyl(1.15, 1.35, 44, new THREE.MeshStandardMaterial({ map: towerTex, roughness: .5 }), root, 0, .6, 0, 20);
@@ -181,7 +181,7 @@ const drop = (() => {
     seats.push(seatMarker(sg, 0, .6, .02)); }
   obC(cx, cz, 3.6);
   const r = cycleRide(Object.assign(R, { id: 'drop', name: '자이로드롭', emoji: '🗼', desc: '40m 꼭대기에서 수직 낙하', root, seats,
-    entrance: V(cx + 1.4, 0, cz + 6.3), exit: V(cx - 2.6, 0, cz + 6.1), board: V(cx, .3, cz + 3.4), camDist: 12, pov: true, density: .5, povUp: 1.85, povBack: .7, povPitch: .3 }));
+    entrance: V(cx + 1.4, 0, cz + 6.3), exit: V(cx - 2.6, 0, cz + 6.1), board: V(cx, .3, cz + 3.4), camDist: 12, pov: true, povUp: 1.5, povBack: .7, povPitch: .26 }));
   const tf = Math.sqrt(2 * (TOP - 12) / G), vf = G * tf, ab = vf * vf / (2 * (12 - 1.6)), tb = vf / ab;
   const yAt = u => {
     if (u < 2) return LOW;
@@ -279,9 +279,9 @@ const coaster = (() => {
     b.seats.forEach(p => seats.push(seatMarker(g, p.x, p.y, p.z)));
     cars.push(g);
   }
-  const R = { load: 14, run: RUN, offset: 0 };
+  const R = { load: 14, run: RUN };
   const r = cycleRide(Object.assign(R, { id: 'coaster', name: '롤러코스터', emoji: '🎢', desc: `길이 ${Math.round(LEN)}m · 최고 ${Math.round(P[crest].y)}m 높이`, root, seats,
-    entrance: V(1.2, 1.35, -27.4), exit: V(6.2, 1.35, -27.4), board: V(1.2, 1.4, -29.5), camDist: 12, pov: true, density: .5, povUp: 1.95, povBack: 1.5 }));
+    entrance: V(1.2, 1.35, -27.4), exit: V(6.2, 1.35, -27.4), board: V(1.2, 1.4, -29.5), camDist: 12, pov: true, povUp: 1.6, povBack: 1.4 }));
   // where the front car is (distance along the track from the station stop) at time t
   const frontAt = t => { const s = cycleAt(r, t); if (s.load) return 0; const u = Math.min(s.u, tim[N]); let lo = 0, hi = N; while (hi - lo > 1){ const m = (lo + hi) >> 1; if (tim[m] <= u) lo = m; else hi = m; } const k = (u - tim[lo]) / Math.max(1e-4, tim[hi] - tim[lo]); return (lo + k) * ds; };
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), tmpX = V(0, 0, 0), tmpU = V(0, 0, 0), tmpT = V(0, 0, 0), tmpP = V(0, 0, 0), one = V(1, 1, 1);

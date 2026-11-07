@@ -123,6 +123,20 @@ function settleSeatClash(t){
     const taken = occupiedSeats(ride), alt = ride.open(t).find(i => !taken.has(i));
     if (alt != null){ myRide.seat = alt; pushPresence(true); } return; }
 }
+// which run each ride is on: the earliest departure any seated rider (me included) holds. With nobody aboard there is
+// no run and the ride rests; a run that has left the station finishes even if its riders drop out.
+function updateRideSessions(t){
+  for (const r of rides){
+    let best = null;
+    const take = T => { if (typeof T !== 'number' || !(t < T + r.run) || T > t + r.load + 2) return; if (best === null || T < best) best = T; };
+    if (me && myRide.id === r.index && !myRide.queued && myRide.seat >= 0) take(myRide.rec);
+    for (const p of remotes.values()) if (p.rd === r.index && p.rs >= 0 && !p.q) take(p.rc);
+    if (best === null && r.sess != null && t >= r.sess && t < r.sess + r.run) best = r.sess;
+    r.sess = best;
+  }
+  // two people started the same ride at nearly the same moment: everyone goes with the earlier departure
+  if (me && myRide.id >= 0 && !myRide.queued){ const r = rides[myRide.id]; if (r.sess != null && r.sess !== myRide.rec){ myRide.rec = r.sess; pushPresence(true); } }
+}
 
 /* ---------- entry ---------- */
 const pv = { r: null, scene: new THREE.Scene(), cam: new THREE.PerspectiveCamera(26, 240 / 280, .1, 20), a: null };
@@ -209,6 +223,7 @@ function frame(){
   if (envT < 1){ envT = Math.min(1, envT + dt / 2.5); applyEnv(envLerp(envFromS, envTo, smooth01(envT))); }
 
   // rides first, so seats are where they should be this frame
+  updateRideSessions(ts);
   for (const r of rides){ r.update(ts); r.root.updateMatrixWorld(true); }
 
   if (me){
@@ -245,8 +260,8 @@ function frame(){
     if (ride.povLevel){ _cf.y = 0; _cf.normalize(); _cu.set(0, 1, 0); }   // seat leans with the horse, the view stays level
     _cs.crossVectors(_cf, _cu).normalize();
     // over-the-shoulder: just above and behind my own head (chibi heads are big, eye level would sit inside the next rider's hair)
-    _cf.applyAxisAngle(_cu, cam.yaw); _cs.crossVectors(_cf, _cu).normalize(); _cf.applyAxisAngle(_cs, -cam.pitch - (ride.povPitch || .12));
-    camera.position.copy(_cp).addScaledVector(_cu, ride.povUp || 1.7).addScaledVector(_cf, -(ride.povBack || 1.45));
+    _cf.applyAxisAngle(_cu, cam.yaw); _cs.crossVectors(_cf, _cu).normalize(); _cf.applyAxisAngle(_cs, -cam.pitch - (ride.povPitch || .1));
+    camera.position.copy(_cp).addScaledVector(_cu, ride.povUp || 1.35).addScaledVector(_cf, -(ride.povBack || 1.35));
     camera.up.copy(_cu); camera.lookAt(tmpV.copy(_cp).addScaledVector(_cu, 1.05).addScaledVector(_cf, 8));
   } else {
     if (cam.mode === 'pov') setCamMode('follow');

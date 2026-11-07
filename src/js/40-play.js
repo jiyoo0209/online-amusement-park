@@ -149,7 +149,7 @@ function tryBoard(t){
   me.sit = true; me.moving = false; ctrl.target = null; ctrl.route = [];
   cam.yaw = 0; cam.pitch = 0;
   if (ride.pov && cam.povPref) setCamMode('pov'); else { cam.dist = Math.max(cam.dist, ride.camDist); }
-  chime(); toast(`${ride.emoji} ${seatName(ride, seat)} 탑승! ${ride.kind === 'wheel' ? '한 바퀴 돌고 내려요' : '곧 출발해요'}`);
+  chime(); toast(`${ride.emoji} ${seatName(ride, seat)} 탑승! ${Math.max(1, Math.ceil(myRide.rec - t))}초 뒤 출발해요${ride.gondolas ? ' · 한 바퀴 돌고 내려요' : ''}`);
   if (seatPick.id === ride.index) renderSeatPick();
   pushPresence(true); refreshBar();
 }

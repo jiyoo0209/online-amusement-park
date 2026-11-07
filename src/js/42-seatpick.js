@@ -1,8 +1,8 @@
 /* ---------- seat picker: choose where to sit ----------
    Opens when you pick a ride. You walk to the entrance as before; at boarding time you sit in the seat you chose
-   (on the Ferris wheel you choose a gondola and board when it comes down). "아무 자리나" keeps the old behaviour. */
+   (on the Ferris wheel you choose a gondola, either of its two seats). "아무 자리나" takes any free seat. */
 const seatPick = { id: -1, timer: 0 };
-const isWheel = r => r.kind === 'wheel';
+const isWheel = r => !!r.gondolas;
 // seats that satisfy a choice: on the wheel a choice is a gondola (either of its two seats)
 function wantSeats(r, want){ if (want < 0) return []; return isWheel(r) ? [want & ~1, (want & ~1) + 1] : [want]; }
 function seatName(r, i){
@@ -12,7 +12,7 @@ function seatName(r, i){
   if (r.id === 'wheel') return `${(i >> 1) + 1}번 곤돌라`;
   return `${i + 1}번 자리`;
 }
-function seatWait(r, t, seat){ return r.waitSeat ? r.waitSeat(t, seat) : r.wait(t); }
+function seatWait(r, t){ return r.wait(t); }
 // where each seat (or gondola) sits on the little map, in 0..1 of the map box; ratio = width / height
 function seatLayout(r, t){
   const S = [];
@@ -31,7 +31,7 @@ function seatLayout(r, t){
     return { ratio: 1, cls: 'carousel', seats: S };
   }
   if (r.id === 'wheel'){
-    for (let k = 0; k < 12; k++){ const v = t / r.period + k / 12, f = v - Math.floor(v), a = -Math.PI / 2 + f * TAU; S.push({ i: k * 2, x: .5 + Math.cos(a) * .39, y: .5 - Math.sin(a) * .39, gondola: k }); }
+    for (let k = 0; k < 12; k++){ const v = r.turnAt(t) + k / 12, f = v - Math.floor(v), a = -Math.PI / 2 + f * TAU; S.push({ i: k * 2, x: .5 + Math.cos(a) * .39, y: .5 - Math.sin(a) * .39, gondola: k }); }
     return { ratio: 1, cls: 'wheel', seats: S };
   }
   for (let i = 0; i < 10; i++){ const a = i / 10 * TAU; S.push({ i, x: .5 + Math.cos(a) * .36, y: .5 + Math.sin(a) * .36 }); }
