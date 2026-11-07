@@ -241,7 +241,9 @@ function frame(){
   // camera
   const ride = me && myRide.id >= 0 && !myRide.queued ? rideById(myRide.id) : null;
   if (cam.mode === 'pov' && ride && rideSeatWorld(ride, myRide.seat, _cp, _cq)){
-    _cu.set(0, 1, 0).applyQuaternion(_cq); _cf.set(0, 0, 1).applyQuaternion(_cq); _cs.crossVectors(_cf, _cu).normalize();
+    _cu.set(0, 1, 0).applyQuaternion(_cq); _cf.set(0, 0, 1).applyQuaternion(_cq);
+    if (ride.povLevel){ _cf.y = 0; _cf.normalize(); _cu.set(0, 1, 0); }   // seat leans with the horse, the view stays level
+    _cs.crossVectors(_cf, _cu).normalize();
     // over-the-shoulder: just above and behind my own head (chibi heads are big, eye level would sit inside the next rider's hair)
     _cf.applyAxisAngle(_cu, cam.yaw); _cs.crossVectors(_cf, _cu).normalize(); _cf.applyAxisAngle(_cs, -cam.pitch - (ride.povPitch || .12));
     camera.position.copy(_cp).addScaledVector(_cu, ride.povUp || 1.7).addScaledVector(_cf, -(ride.povBack || 1.45));

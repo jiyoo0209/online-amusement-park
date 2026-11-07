@@ -44,36 +44,26 @@ const carousel = (() => {
   sph(.45, mat.gold, top, 0, 3.2, 0, 12); cyl(.04, .04, 1.2, mat.darkSteel, top, 0, 3.3, 0, 4);
   const flag = mesh(new THREE.PlaneGeometry(.9, .5), new THREE.MeshStandardMaterial({ color: C('#f2c443'), side: THREE.DoubleSide }), top, .45, 4.25, 0, false);
   const bulbs = []; for (let i = 0; i < 40; i++){ const a = i / 40 * TAU; bulbs.push(sph(.09, i % 2 ? mat.bulb : mat.bulbPink, top, Math.cos(a) * 7.95, -.6, Math.sin(a) * 7.95, 6)); }
-  // horses
-  const horseCols = ['#f6f1e8', '#f5d7a1', '#c9a27e', '#f2c6d6', '#b9d7f0', '#5b4636'];
-  const saddleCols = ['#d9473f', '#3f7fc9', '#8a6cc9', '#3aa3a0', '#ef8a3c', '#e2b456'];
-  const bodyG = new THREE.SphereGeometry(.42, 16, 12); bodyG.scale(.8, .75, 1.55);
-  const neckG = new THREE.CylinderGeometry(.16, .24, .75, 10); const headG = new THREE.BoxGeometry(.3, .32, .62); const legG = new THREE.CylinderGeometry(.06, .05, .7, 6);
-  const horses = [], seats = [];
+  // horses: rearing cartoon horses on gold poles (model + paint schemes in 17-carousel-horse.js)
+  const HY = 1.57, horses = [], seats = [];
   const place = (n, r, off) => { for (let i = 0; i < n; i++){ const a = i / n * TAU + off; horses.push({ a, r }); } };
   place(10, 5.4, 0); place(6, 3.4, .3);
   horses.forEach((h, i) => {
     const px = Math.cos(h.a) * h.r, pz = Math.sin(h.a) * h.r, head = Math.atan2(Math.sin(h.a), -Math.cos(h.a));
     cyl(.045, .045, 4.2, mat.gold, spin, px, .25, pz, 8, false);
-    const hg = grp(spin, px, 1.0, pz, head); h.g = hg; h.ph = i * 1.7;
-    const bm = M(horseCols[i % horseCols.length], { roughness: .45 }), sm = M(saddleCols[i % saddleCols.length], { roughness: .5 });
-    mesh(bodyG, bm, hg, 0, 0, 0); const nk = mesh(neckG, bm, hg, 0, .35, .48); nk.rotation.x = .55;
-    const hd = mesh(headG, bm, hg, 0, .68, .72); hd.rotation.x = .55;
-    const mane = mesh(new THREE.BoxGeometry(.06, .5, .25), sm, hg, 0, .55, .42); mane.rotation.x = .55;
-    [[-.16, .38, -.9], [.16, .38, -.75], [-.16, -.35, .9], [.16, -.35, .7]].forEach(([x, z, r]) => { const l = mesh(legG, bm, hg, x, -.42, z); l.rotation.x = r; });
-    const tail = mesh(new THREE.ConeGeometry(.1, .6, 6), sm, hg, 0, .05, -.72); tail.rotation.x = -2.3;
-    box(.62, .1, .55, sm, hg, 0, .3, -.05); box(.05, .3, .05, mat.gold, hg, 0, .4, .2);
-    h.seat = seatMarker(hg, 0, .38, -.08); seats.push(h.seat);
+    const hg = grp(spin, px, HY, pz, head); h.g = hg; h.ph = i * 1.7;
+    h.seat = seatMarker(hg, 0, .41, -.08); h.seat.rotation.x = HORSE_TILT; seats.push(h.seat);
   });
+  const herd = buildCarouselHorses(spin, horses);
   obC(cx, cz, 8.1);
   const r = cycleRide(Object.assign(R, { id: 'carousel', name: '회전목마', emoji: '🎠', desc: '천천히 돌아가는 목마', root, seats,
-    entrance: V(cx + 9.0, 0, cz + 1.5), exit: V(cx + 9.2, 0, cz - 2.6), board: V(cx + 7.3, .55, cz + 1.2), camDist: 7, pov: true, density: .45, camPhiMax: .16, camDistMax: 7.5 }));
+    entrance: V(cx + 9.0, 0, cz + 1.5), exit: V(cx + 9.2, 0, cz - 2.6), board: V(cx + 7.3, .55, cz + 1.2), camDist: 7, pov: true, povLevel: true, povUp: 1.3, povBack: 1.35, povPitch: .16, density: .45, camPhiMax: .16, camDistMax: 7.5 }));
   const W = TAU / 9, ramp = 4;
   const angleAt = t => { const s = cycleAt(r, t), per = W * (r.run - ramp); let a = s.cyc * per;
     if (!s.load){ const u = s.u, d = r.run - u; if (u < ramp) a += W * u * u / (2 * ramp); else if (d < ramp) a += per - W * d * d / (2 * ramp); else a += W * ramp / 2 + W * (u - ramp); }
     return a; };
   r.speedAt = t => { const s = cycleAt(r, t); if (s.load) return 0; const k = Math.min(1, s.u / ramp, (r.run - s.u) / ramp); return W * k * 5.4; };
-  r.update = t => { const a = angleAt(t); spin.rotation.y = a % TAU; horses.forEach(h => { h.g.position.y = 1.0 + .28 * Math.sin(a * 3 + h.ph); h.g.rotation.x = .06 * Math.cos(a * 3 + h.ph); }); flag.rotation.y = Math.sin(t * 2) * .3; };
+  r.update = t => { const a = angleAt(t); spin.rotation.y = a % TAU; horses.forEach(h => { h.g.position.y = HY + .28 * Math.sin(a * 3 + h.ph); h.g.rotation.x = .06 * Math.cos(a * 3 + h.ph); }); herd.update(); flag.rotation.y = Math.sin(t * 2) * .3; };
   return addRide(r);
 })();
 
