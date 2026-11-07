@@ -205,6 +205,38 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 #shot .acts .pri{background:var(--accent);color:var(--accent-ink)}
 #shot .acts .ghost{grid-column:1 / -1;height:42px;background:transparent;font-size:13px;color:var(--ink-dim)}
 #shot .hint{font-size:12.5px;color:var(--ink-dim);text-align:center;word-break:keep-all;max-width:420px}
+/* seat picker */
+#seatPick{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom,0px));width:min(380px,calc(100vw - 24px));box-sizing:border-box;padding:14px 14px 12px;border-radius:20px;background:rgba(24,28,62,.95);box-shadow:0 14px 40px rgba(8,8,24,.45);display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto}
+#seatPick h2{margin:0;font-family:var(--font-display);font-weight:400;font-size:18px}
+#seatPick .sub{margin:-4px 0 0;font-size:13px;color:var(--ink-dim);min-height:18px}
+.spmap{position:relative;width:100%;margin:2px auto 0;border-radius:14px;background:rgba(255,248,236,.05)}
+.spmap .deco,.spmap .seats{position:absolute;inset:0}
+.spmap .deco > *{position:absolute;pointer-events:none}
+.spmap.coaster .car{left:18%;width:64%;height:21%;border-radius:12px 12px 8px 8px;background:rgba(217,71,63,.5);border:1.5px solid rgba(255,200,180,.4);font-style:normal;font-size:10px;color:rgba(255,248,236,.7);padding:3px 0 0 6px;box-sizing:border-box}
+.spmap.coaster .deco b{top:0;left:50%;transform:translate(-50%,-2px);font-size:11px;font-weight:400;color:var(--accent)}
+.spmap.viking .hull{left:4%;right:4%;top:12%;bottom:12%;border-radius:50% 50% 46% 46% / 30% 30% 70% 70%;background:rgba(168,48,46,.45);border:1.5px solid rgba(242,196,67,.45)}
+.spmap.viking .deco b{right:-2px;top:50%;transform:translateY(-50%);font-size:18px}
+.spmap.carousel .disc{inset:4%;border-radius:50%;background:rgba(201,146,92,.35);border:1.5px solid rgba(226,180,86,.45)}
+.spmap.carousel .core,.spmap.drop .core{left:50%;top:50%;width:18%;height:18%;transform:translate(-50%,-50%);border-radius:50%;background:rgba(242,196,67,.4)}
+.spmap.drop .disc{inset:14%;border-radius:50%;border:8px solid rgba(242,196,67,.35)}
+.spmap.wheel .rim{inset:11%;border-radius:50%;border:3px solid rgba(232,93,117,.6)}
+.spmap.wheel .deco b{left:50%;bottom:-2px;transform:translateX(-50%);font-size:11px;font-weight:400;color:var(--accent)}
+.spmap .seat{position:absolute;width:32px;height:32px;margin:-16px 0 0 -16px;padding:0;border-radius:10px;border:1.5px solid rgba(255,248,236,.55);background:rgba(255,248,236,.16);color:var(--ink);font-size:12px;font-variant-numeric:tabular-nums;display:grid;place-items:center}
+.spmap.coaster .seat{width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:9px}
+.spmap .seat:hover:not(:disabled){background:rgba(255,248,236,.3)}
+.spmap .seat.gon{width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border-color:var(--c);background:color-mix(in srgb,var(--c) 30%,transparent)}
+.spmap .seat.gon.here{box-shadow:0 0 0 3px rgba(255,207,90,.55)}
+.spmap .seat.chosen,.spmap .seat.mine{background:var(--accent);border-color:#fff3cf;color:var(--accent-ink);font-weight:700}
+.spmap .seat.taken i{position:absolute;right:-6px;top:-6px;width:17px;height:17px;border-radius:50%;font-style:normal;font-size:10px;line-height:17px;text-align:center;color:#fff;box-shadow:0 0 0 1.5px rgba(24,28,62,.9)}
+.spmap .seat:disabled{opacity:.42;cursor:default}
+#seatPick .legend{display:flex;gap:12px;justify-content:center;font-size:11.5px;color:var(--ink-dim)}
+#seatPick .legend span{display:flex;align-items:center;gap:5px}
+#seatPick .legend i{width:11px;height:11px;border-radius:4px;border:1.5px solid rgba(255,248,236,.55);background:rgba(255,248,236,.16)}
+#seatPick .legend i.y{background:var(--accent);border-color:#fff3cf}
+#seatPick .legend i.o{background:#ff8fae;border-radius:50%;border:0}
+#seatPick .btns{display:flex;gap:8px}
+#seatPick .btns button{flex:1;height:44px;border:0;border-radius:12px;background:rgba(255,248,236,.12);font-size:14px}
+#seatPick .btns #spAny{background:rgba(255,207,90,.2)}
 @media (max-width:420px){#bar .act span.lbl{display:none}#rideChip b{display:none}}
 @media (prefers-reduced-motion:reduce){#toast{transition:none}}
 </style>
@@ -230,12 +262,20 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
   <div id="people" class="panel pop" role="dialog" aria-label="지금 접속 중인 사람" hidden><ul id="peopleList"></ul><div class="fade" id="peopleFade"></div></div>
   <div id="rideMenu" class="panel" role="dialog" aria-label="놀이기구 고르기" hidden><h2>어떤 걸 탈까요?</h2><ul id="rideList"></ul></div>
   <div id="emoPop" class="panel" role="dialog" aria-label="이모지 보내기" hidden><button class="nav l" type="button" data-dir="l" aria-label="이모지 앞으로">‹</button><button class="nav r" type="button" data-dir="r" aria-label="이모지 더 보기">›</button><div class="strip"><div class="grp" role="group" aria-label="기분"><span class="cap">기분</span><div class="row"><button type="button" data-e="❤️" aria-label="좋아 ❤️">❤️</button><button type="button" data-e="😆" aria-label="신나 😆">😆</button><button type="button" data-e="😱" aria-label="무서워 😱">😱</button><button type="button" data-e="🥺" aria-label="감동 🥺">🥺</button></div></div><span class="sep" aria-hidden="true"></span><div class="grp" role="group" aria-label="리액션"><span class="cap">리액션</span><div class="row"><button type="button" data-e="👍" aria-label="좋아요 👍">👍</button><button type="button" data-e="👏" aria-label="박수 👏">👏</button><button type="button" data-e="🙌" aria-label="만세 🙌">🙌</button><button type="button" data-e="📸" aria-label="찰칵 📸">📸</button></div></div><span class="sep" aria-hidden="true"></span><div class="grp" role="group" aria-label="놀이공원"><span class="cap">놀이공원</span><div class="row"><button type="button" data-e="🎢" aria-label="롤러코스터 🎢">🎢</button><button type="button" data-e="🎡" aria-label="관람차 🎡">🎡</button><button type="button" data-e="🎠" aria-label="회전목마 🎠">🎠</button><button type="button" data-e="🎈" aria-label="풍선 🎈">🎈</button><button type="button" data-e="🍭" aria-label="솜사탕 🍭">🍭</button></div></div></div></div>
+  <div id="seatPick" class="panel" role="dialog" aria-labelledby="spTitle" hidden>
+    <h2 id="spTitle">자리 고르기</h2>
+    <p class="sub" id="spSub"></p>
+    <div class="spmap" id="spMap"></div>
+    <div class="legend" aria-hidden="true"><span><i></i>빈자리</span><span><i class="y"></i>고른 자리</span><span><i class="o"></i>다른 사람</span></div>
+    <div class="btns"><button id="spAny" type="button">아무 자리나</button><button id="spCancel" type="button">안 탈래요</button></div>
+  </div>
   <nav id="bar" class="panel" aria-label="놀이기구와 행동">
     <button id="rideChip" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="rideMenu" aria-label="놀이기구 고르기"><span class="fb" aria-hidden="true">🎢</span><b>놀이기구</b></button>
     <button id="bWave" class="act" type="button"><span aria-hidden="true">👋</span><span class="lbl">손 흔들기</span></button>
     <button id="bEmo" class="act" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="emoPop"><span aria-hidden="true">😊</span><span class="lbl">이모지</span></button>
     <button id="bSnack" class="act" type="button"><span aria-hidden="true">🍭</span><span class="lbl">간식</span></button>
     <button id="bStand" class="act" type="button" hidden><span aria-hidden="true">🧍</span><span class="lbl">일어서기</span></button>
+    <button id="bSeat" class="act" type="button" hidden><span aria-hidden="true">💺</span><span class="lbl">자리</span></button>
     <button id="bView" class="act" type="button" hidden><span aria-hidden="true">👀</span><span class="lbl">시점</span></button>
     <button id="bExit" class="act hot" type="button" hidden><span aria-hidden="true">🚪</span><span class="lbl">내리기</span></button>
   </nav>

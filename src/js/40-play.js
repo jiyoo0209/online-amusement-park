@@ -13,7 +13,7 @@ function walkTo(p){
   pts.push(p.clone()); ctrl.target = pts.shift(); ctrl.route = pts; ctrl.stuck = 0;
 }
 // my ride: id -1 = not on a ride. queued = waiting at the entrance for the next boarding
-const myRide = { id: -1, seat: -1, rec: 0, queued: false, at: 0, warned: 0 };
+const myRide = { id: -1, seat: -1, rec: 0, queued: false, at: 0, warned: 0, want: -1, clash: null }; // want: the seat you picked (-1 = any)
 let myWave = 0, myEmo = '', myEmoT = 0;
 
 function resolve(x, z, r = .32){
@@ -115,34 +115,49 @@ function sitAt(i){ const s = seats[i]; if (s.occ || s.occRemote) return; placeSe
 function occupiedSeats(ride){ const set = new Set(); if (typeof remotes !== 'undefined') for (const r of remotes.values()) if (r.rd === ride.index && r.rs >= 0) set.add(r.rs); return set; }
 function goToRide(id){
   const ride = rideById(id); if (!ride || !me) return;
-  if (myRide.id === id){ toast(myRide.queued ? `${ride.name} 줄에 서 있어요` : `${ride.name} 타는 중이에요`); return; }
+  if (myRide.id === id || ctrl.goRide === id){ openSeatPick(id); return; }
   if (myRide.id >= 0 && !myRide.queued){ toast('지금 타는 놀이기구가 끝나면 갈 수 있어요'); return; }
   leaveQueue(); standUp(); setRideMenuOpen(false);
-  ctrl.pendingSeat = -1; walkTo(ride.entrance); ctrl.goRide = id;
-  toast(`${ride.emoji} ${ride.name}(으)로 가는 중`);
+  ctrl.pendingSeat = -1; walkTo(ride.entrance); ctrl.goRide = id; myRide.want = -1;
+  toast(`${ride.emoji} ${ride.name}(으)로 가는 중 · 앉을 자리를 골라 주세요`);
+  openSeatPick(id);
 }
 function joinQueue(id){ const ride = rideById(id); myRide.id = id; myRide.seat = -1; myRide.queued = true; myRide.at = nowS(); ctrl.goRide = -1; ctrl.target = null; ctrl.route = [];
   me.rot = Math.atan2(ride.board.x - me.pos.x, ride.board.z - me.pos.z); pushPresence(true); refreshBar();
   const w = ride.wait(nowS()); if (w > 1.5) toast(`${ride.name} 줄 서기 · ${Math.ceil(w)}초 뒤 탑승`); }
-function leaveQueue(){ if (myRide.id >= 0 && myRide.queued){ myRide.id = -1; myRide.queued = false; pushPresence(true); refreshBar(); } }
+function leaveQueue(){ if (myRide.id >= 0 && myRide.queued){ myRide.id = -1; myRide.queued = false; myRide.want = -1; closeSeatPick(); pushPresence(true); refreshBar(); } }
 function tryBoard(t){
   const ride = rideById(myRide.id); if (!ride) return;
-  const taken = occupiedSeats(ride), open = ride.open(t).filter(i => !taken.has(i));
-  if (!open.length) return;
-  // pick at random among the free seats (two people boarding at once rarely collide), front rows a bit more likely
-  const seat = open[Math.floor(Math.pow(Math.random(), 1.4) * open.length)];
+  if (seatPick.id === ride.index) return; // still choosing a seat: wait for the choice (closing the picker = any seat)
+  const taken = occupiedSeats(ride), openAll = ride.open(t), open = openAll.filter(i => !taken.has(i));
+  let seat;
+  if (myRide.want >= 0){
+    // the seat you picked: wait for it; if someone else sat there first, say so once and let you pick again
+    const want = wantSeats(ride, myRide.want), ok = want.filter(i => open.includes(i));
+    if (!ok.length){
+      if (want.some(i => openAll.includes(i))){ const key = ride.rec(t, want[0]) + ':' + myRide.want;
+        if (myRide.clash !== key){ myRide.clash = key; toast('고른 자리에 다른 사람이 먼저 앉았어요 · 다른 자리를 골라 주세요'); openSeatPick(ride.index); } }
+      return;
+    }
+    seat = ok[0];
+  } else {
+    if (!open.length) return;
+    // any seat: pick at random among the free ones (two people boarding at once rarely collide), front rows a bit more likely
+    seat = open[Math.floor(Math.pow(Math.random(), 1.4) * open.length)];
+  }
   myRide.seat = seat; myRide.rec = ride.rec(t, seat); myRide.queued = false; myRide.at = t;
   me.sit = true; me.moving = false; ctrl.target = null; ctrl.route = [];
   cam.yaw = 0; cam.pitch = 0;
   if (ride.pov && cam.povPref) setCamMode('pov'); else { cam.dist = Math.max(cam.dist, ride.camDist); }
-  chime(); toast(`${ride.emoji} ${ride.name} 탑승! ${ride.kind === 'wheel' ? '한 바퀴 돌고 내려요' : '곧 출발해요'}`);
+  chime(); toast(`${ride.emoji} ${seatName(ride, seat)} 탑승! ${ride.kind === 'wheel' ? '한 바퀴 돌고 내려요' : '곧 출발해요'}`);
+  if (seatPick.id === ride.index) renderSeatPick();
   pushPresence(true); refreshBar();
 }
 function getOff(ride, fun){
   me.rideP = null; me.rideQ = null; me.sit = false; me.handsUp = false;
   const p = ride.exit, j = p.y > .1 ? .25 : .6; me.pos.set(p.x + rand(-j, j), 0, p.z + rand(-j * .6, j * .6)); const [x, z] = resolve(me.pos.x, me.pos.z); me.pos.x = x; me.pos.z = z; me.pos.y = groundH(x, z);
   me.rot = Math.atan2(PLAZA.x - x, PLAZA.z - z); me.g.rotation.set(0, me.rot, 0);
-  myRide.id = -1; myRide.seat = -1; myRide.queued = false;
+  myRide.id = -1; myRide.seat = -1; myRide.queued = false; myRide.want = -1; closeSeatPick();
   if (cam.mode === 'pov') setCamMode('follow');
   if (fun){ const lines = { carousel: '빙글빙글 재밌었다!', viking: '으아… 심장이 아직 두근두근', wheel: '공원이 다 보였어요', drop: '살았다… 다시 탈래!', coaster: '최고였어! 한 번 더?' }; toast(lines[ride.id] || '재밌었다!'); say(me, lines[ride.id] || '재밌었다!', 3500); confetti(me.pos); }
   pushPresence(true); refreshBar();
@@ -195,7 +210,7 @@ function renderRideMenu(){
 }
 let rideMenuT = 0;
 // the joystick hides while the ride list, emoji strip or snack menu is open
-function syncJoy(){ const covered = !$('#rideMenu').hidden || !$('#emoPop').hidden || !$('#menu').hidden; if (covered) cancelJoy(); joy.el.style.visibility = covered ? 'hidden' : ''; }
+function syncJoy(){ const covered = !$('#rideMenu').hidden || !$('#emoPop').hidden || !$('#menu').hidden || !$('#seatPick').hidden; if (covered) cancelJoy(); joy.el.style.visibility = covered ? 'hidden' : ''; }
 function setRideMenuOpen(open){ if (open){ setPeopleOpen(false); setSoundOpen(false); setEmoOpen(false); cancelJoy(); renderRideMenu(); clearInterval(rideMenuT); rideMenuT = setInterval(renderRideMenu, 500); } else clearInterval(rideMenuT);
   $('#rideMenu').hidden = !open; $('#rideChip').setAttribute('aria-expanded', open); syncJoy(); }
 $('#rideChip').addEventListener('click', e => { e.stopPropagation(); setRideMenuOpen($('#rideMenu').hidden); });

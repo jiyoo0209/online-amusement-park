@@ -146,17 +146,11 @@ const wheel = (() => {
   { const cols = [mat.bulb, mat.bulbPink, mat.bulbBlue], bg = new THREE.SphereGeometry(.12, 6, 4), m4 = new THREE.Matrix4();
     cols.forEach((m, ci) => { const pts = []; for (const sz of [-1.45, 1.45]) for (let i = 0; i < 72; i++) if (i % 3 === ci){ const a = i / 72 * TAU; pts.push([Math.cos(a) * RAD, Math.sin(a) * RAD, sz]); }
       const im = new THREE.InstancedMesh(bg, m, pts.length); pts.forEach(([x, y, z], i) => { m4.makeTranslation(x, y, z); im.setMatrixAt(i, m4); }); spin.add(im); }); }
-  // gondolas stay upright, so they hang in root space
-  const gcols = ['#ff6b6b', '#ffd166', '#4dabf7', '#63e6be', '#b197fc', '#ff8fd0'];
+  // glass capsule gondolas (16-wheel-gondola.js); they stay upright, so they hang in root space and sway a little around the pivot
   const cabins = [], seats = [];
   for (let k = 0; k < N; k++){
-    const g = grp(root); const body = grp(g, 0, -1.1, 0); const cm = M(gcols[k % gcols.length], { roughness: .45 });
-    cyl(.05, .05, 1.1, mat.steel, g, 0, -1.1, 0, 5, false);
-    cyl(1.05, .95, .85, cm, body, 0, -1.45, 0, 16); mesh(new THREE.CylinderGeometry(1.05, 1.05, .95, 16, 1, true), mat.glass, body, 0, -.12, 0, false);
-    for (let i = 0; i < 6; i++){ const a = i / 6 * TAU; cyl(.04, .04, .95, cm, body, Math.cos(a) * 1.03, -.6, Math.sin(a) * 1.03, 4, false); }
-    const roof = mesh(new THREE.SphereGeometry(1.08, 16, 8, 0, TAU, 0, Math.PI / 2), cm, body, 0, .35, 0); roof.scale.y = .55;
-    box(.55, .42, 1.4, mat.cream, body, -.55, -1.45, 0, false); box(.55, .42, 1.4, mat.cream, body, .55, -1.45, 0, false);
-    seats.push(seatMarker(body, -.5, -1.05, .25, Math.PI / 2), seatMarker(body, .5, -1.05, -.25, -Math.PI / 2));
+    const g = grp(root), body = grp(g), b = buildGondola(k); body.add(b.group);
+    b.seats.forEach(s => seats.push(seatMarker(body, s.p.x, s.p.y, s.p.z, s.rot)));
     cabins.push({ g, body });
   }
   // boarding deck
@@ -171,6 +165,7 @@ const wheel = (() => {
   r.done = (rec, t, seat) => t / P + (seat >> 1) / N - rec > 1 - WIN * .5;
   r.wait = t => { let best = 1e9; for (let k = 0; k < N; k++){ const f = phi(k, t); best = Math.min(best, (1 - WIN - f + (f > 1 - WIN ? 1 : 0)) * P); } return atBottom(t) >= 0 ? 0 : best; };
   r.status = t => atBottom(t) >= 0 ? '곤돌라 도착 · 지금 탈 수 있어요' : `다음 곤돌라 ${Math.ceil(r.wait(t))}초 뒤`;
+  r.waitSeat = (t, seat) => { const f = phi(seat >> 1, t); return f < WIN * .6 || f > 1 - WIN ? 0 : (1 - WIN - f) * P; };
   r.npcKey = (seat, t) => Math.round(t / P + (seat >> 1) / N - .5 + WIN);
   r.speedAt = () => RAD * TAU / P;
   r.update = t => { spin.rotation.z = (t / P % 1) * TAU;

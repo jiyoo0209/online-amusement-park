@@ -63,8 +63,9 @@ document.addEventListener('pointerdown', e => { const t = e.target, inEl = sel =
   if (!$('#people').hidden && !inEl('#who')) setPeopleOpen(false);
   if (!$('#soundPop').hidden && !inEl('#soundBtn')) setSoundOpen(false);
   if (!$('#rideMenu').hidden && !inEl('#rideChip')) setRideMenuOpen(false);
-  if (!$('#emoPop').hidden && !inEl('#bEmo')) setEmoOpen(false); });
-addEventListener('keydown', e => { if (e.key === 'Escape'){ setPeopleOpen(false); setSoundOpen(false); setRideMenuOpen(false); setEmoOpen(false); closeMenu(); } });
+  if (!$('#emoPop').hidden && !inEl('#bEmo')) setEmoOpen(false);
+  if (!$('#seatPick').hidden && !inEl('#bSeat') && !inEl('#rideChip') && !inEl('#rideMenu')) closeSeatPick(); });
+addEventListener('keydown', e => { if (e.key === 'Escape'){ setPeopleOpen(false); setSoundOpen(false); setRideMenuOpen(false); setEmoOpen(false); closeSeatPick(); closeMenu(); } });
 
 // Supabase Realtime: presence carries name + look (slow-changing); position, ride seat and actions go over broadcast, throttled.
 function makeSupabaseRoom(cfg){
@@ -266,10 +267,12 @@ function frame(){
   // ride info pill
   infoT -= dt; if (infoT <= 0 && me){ infoT = .25; const el = $('#rideInfo');
     if (myRide.id >= 0){ const r = rideById(myRide.id); let txt;
-      if (myRide.queued) txt = `${r.emoji} ${r.name} 줄 · ${r.status(ts)}`;
+      if (myRide.queued){ const w = myRide.want >= 0 ? seatWait(r, ts, myRide.want) : 0; txt = myRide.want >= 0 ? `${r.emoji} ${seatName(r, myRide.want)} · ${w <= 0 ? '곧 탑승' : `${Math.ceil(w)}초 뒤 탑승`}` : `${r.emoji} ${r.name} 줄 · ${r.status(ts)}`; }
       else { const v = r.speedAt(ts), pt = r.phaseText ? r.phaseText(ts) : ''; const st = r.kind === 'cycle' ? cycleAt(r, ts) : null;
         txt = `${r.emoji} ${r.name} · ` + (pt || (st && st.load ? `${Math.ceil(st.left)}초 뒤 출발` : v > 1.5 ? `시속 ${Math.round(v * 3.6)}km` : '운행 중')); }
-      el.textContent = txt; el.hidden = false; } else el.hidden = true; }
+      el.textContent = txt; el.hidden = false; } else el.hidden = true;
+    // seat button: while walking to a ride, waiting in line, or seated before departure
+    { const id = myRide.id >= 0 ? myRide.id : ctrl.goRide, r = rideById(id); $('#bSeat').hidden = !(r && (myRide.id < 0 || myRide.queued || canSwitchNow(r, ts))); } }
 
   // name tags & bubbles
   tagLayer.hidden = !entered || (photo.on && !photo.tags);
